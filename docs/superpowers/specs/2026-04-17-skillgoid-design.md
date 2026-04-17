@@ -23,7 +23,7 @@ The original Chungoid (2024–2025) bet on a stage-based autonomous workflow bac
 
 | Chungoid component | Replaced by |
 |---|---|
-| Reflection store in Chroma | File-based vault + Claude's in-context semantic reasoning |
+| Reflection store in Chroma | Curated per-language markdown files in user-global vault |
 | `a2a_agent_registry` → tool lookup | Claude Code subagents, Skill tool |
 | `project_status.json` + filelock | `TaskCreate` / `TaskList` |
 | Context7 library-doc retrieval | `WebFetch` / `WebSearch` |
@@ -92,14 +92,26 @@ The "loop" is not runtime infrastructure — it is a **prompt pattern** embedded
 
 ### User-global vault (`~/.claude/skillgoid/vault/`)
 
-- `learnings/YYYY-MM-DD-<project-slug>/reflection.md` — one markdown file per *notable* reflection promoted from a finished project
-- `index.jsonl` — append-only metadata index: `{slug, date, languages, tags, outcome, keywords, reflection_path}` — used for fast filtering before semantic scan
+- `<language>-lessons.md` — **one curated living document per language.** Example: `python-lessons.md`, `node-lessons.md`, `go-lessons.md`. Each file is a human-readable, deduped, size-bounded synthesis of learnings from past projects in that language.
+- `meta-lessons.md` — language-agnostic lessons (architecture patterns, goal-clarification heuristics, gate-design tips). Created only when a reflection is language-neutral.
 
-**No Chroma, no vector DB, no embeddings.** Retrieval uses Claude's own in-context reasoning over *filtered* files: the jsonl index narrows candidates by language/tags/keywords, then Claude reads the surviving reflections and decides which are relevant. Rationale:
+**Curated, not accumulated.** `skillgoid-retrospect` does not append new files or grow an index. It *edits the existing language file* to:
 
-- Zero install burden for end users (the killer issue with the Chungoid Chroma dependency).
-- Plain markdown is user-inspectable, grep-able, and optionally git-trackable.
-- Small-scale retrieval quality is fine without vector search — projects are tagged, not enumerated in the thousands.
+1. Integrate new lessons from the just-finished project.
+2. Dedupe against existing entries (merge, rewrite, or drop as appropriate).
+3. Compress older entries into a "distilled prior art" section if the file exceeds a size threshold (default 8K tokens).
+
+**Retrieval is trivial.** `skillgoid-retrieve` reads *one file* for the detected language (plus `meta-lessons.md` if present), full-document, and passes contents to Claude as context. No index filtering, no semantic scan, no vector search, no embeddings.
+
+Rationale:
+
+- **Bounded size.** Compression at write time caps every language file at a fixed token budget. Vault tokens injected per project are predictable.
+- **No retrieval-quality problem.** You don't miss relevant lessons because there's only one place to look. This sidesteps the keyword-vs-semantic gap that made the pile-of-files design fragile without embeddings.
+- **Human-curated end state.** Users can open, read, edit, or dotfiles-track these files directly. No opaque vector DB.
+- **Self-evident value.** The file either contains useful lessons or it doesn't — no hidden retrieval to trust.
+- **Zero install burden.** No Chroma, no embeddings, no services.
+
+This design matches how humans actually keep notes: one living document per topic, consolidated over time, not a pile of fragments.
 
 ---
 
@@ -251,7 +263,7 @@ Each of these writes a terminal entry to `iterations/NNN.json` recording *which*
 
 ## 11. Out of scope (YAGNI v0)
 
-- ChromaDB, vector stores, embeddings — replaced by filtered markdown + in-context semantic scan.
+- ChromaDB, vector stores, embeddings — replaced by curated per-language markdown files, read whole.
 - MCP server, stdio/HTTP transports — skills *are* the integration.
 - FastAPI / uvicorn / any web framework.
 - Agent registry with `AgentCard`s — Claude Code subagents and `Skill` tool cover this.
@@ -269,7 +281,8 @@ These are flagged so you can override in review:
 
 | Default | Chosen value | Reason |
 |---|---|---|
-| Memory substrate | File-based vault (markdown + jsonl index) | Distribution friction of Chroma kills adoption |
+| Memory substrate | Curated per-language markdown files (one file per language, plus `meta-lessons.md`) | Bounded size, predictable retrieval cost, human-readable, no embeddings, no install burden |
+| Vault compression threshold | 8K tokens per language file | Beyond this, retrospect distills older entries into a summary section |
 | Criteria format | Structured YAML gates + free-form acceptance scenarios | Sharpest gates + human-readable |
 | Default `max_attempts` | 5 | Balance between giving the loop room and not burning tokens |
 | Project name | Skillgoid | Folder hint + continuity with Chungoid lineage |
@@ -282,10 +295,13 @@ These are flagged so you can override in review:
 ## 13. Open questions (to resolve during planning)
 
 1. **Plugin manifest hooks:** confirm current Claude Code plugin format supports declaring hooks at install, vs. requiring user `settings.json` edit. If not supported, the README-documented opt-in install is acceptable for v0.
-2. **Vault retrieval strategy details:** the jsonl index filter criteria (tag taxonomy, language detection) and the top-K cap before in-context scan. Pick defaults during `writing-plans`.
-3. **Subagent use:** should `skillgoid-loop` invoke a fresh subagent per chunk to isolate context, or run in the main session? Subagent isolation is cleaner but loses in-session continuity. Probably subagent-per-chunk.
-4. **Stall detection heuristic:** the exact "substantively identical" comparison for repeated gate failures — hash of `(gate_id, first 200 chars of stderr)`? Needs spiking.
-5. **Interactive clarify flow length:** how many rounds of Q&A is `skillgoid-clarify` allowed? Hard cap or agent-judgment?
+2. **Language detection for the vault:** how does `skillgoid-retrieve` decide which `<language>-lessons.md` to load? Options: (a) infer from user's rough goal text; (b) read from an explicit `language:` field in `criteria.yaml`; (c) detect from existing project files if present. Probably all three with a fallback chain.
+3. **Multi-language projects:** a full-stack app has Python backend + Node frontend. Does `skillgoid-retrieve` load both `python-lessons.md` and `node-lessons.md`, and does `skillgoid-retrospect` split reflections across both files? Resolve in `writing-plans`.
+4. **Compression heuristic:** when a language file hits the 8K threshold, what's the rule for which entries get distilled? Least-recently-referenced? Oldest? Those superseded by newer lessons? Pick during planning.
+5. **"Notable" definition:** reflections are curated into the vault if flagged "notable" during `skillgoid-loop`. Needs an explicit rubric — failure modes encountered, unexpected tool/library behavior, surprising design wins. The curator (retrospect) should not promote every reflection.
+6. **Subagent use:** should `skillgoid-loop` invoke a fresh subagent per chunk to isolate context, or run in the main session? Subagent isolation is cleaner but loses in-session continuity. Probably subagent-per-chunk.
+7. **Stall detection heuristic:** the exact "substantively identical" comparison for repeated gate failures — hash of `(gate_id, first 200 chars of stderr)`? Needs spiking.
+8. **Interactive clarify flow length:** how many rounds of Q&A is `skillgoid-clarify` allowed? Hard cap or agent-judgment?
 
 ---
 
@@ -314,12 +330,19 @@ These are flagged so you can override in review:
 ### 14.5 `skillgoid-retrieve`
 
 - **Trigger:** by orchestrator at project start; also invokable explicitly mid-project (e.g., "pull lessons about auth from past projects").
-- **Behavior:** filters `~/.claude/skillgoid/vault/index.jsonl` by language/tags/keywords derived from the user's rough goal, reads top-K surviving reflections, summarizes relevance to the current project, and injects the summary into context.
+- **Behavior:** detects the primary language(s) for the project (from the rough goal, existing project files, or an explicit tag). Reads the corresponding `<language>-lessons.md` from the vault, plus `meta-lessons.md` if present. Passes file contents to Claude as context; Claude surfaces the subset relevant to the current goal. No filtering, no ranking, no index. If no vault file exists for the detected language yet, returns cleanly with "no prior lessons" rather than failing.
 
 ### 14.6 `skillgoid-retrospect`
 
 - **Trigger:** by orchestrator after all chunks pass their gates (or on explicit user request if the project was abandoned).
-- **Behavior:** writes `retrospective.md`. **Promotes notable reflections** from `iterations/*.json` to `~/.claude/skillgoid/vault/learnings/YYYY-MM-DD-<slug>/reflection.md` + appends a new line to `index.jsonl`. "Notable" = reflections flagged during `skillgoid-loop` (e.g., failure modes encountered, unexpected interactions). Boring reflections stay project-local.
+- **Behavior:**
+  1. Writes `retrospective.md` — a project-local summary of what worked, what didn't, and the final state.
+  2. **Curates** notable reflections from `iterations/*.json` into the appropriate `<language>-lessons.md` (or `meta-lessons.md` for language-neutral learnings):
+     - Read the existing vault file if present.
+     - Integrate this project's notable reflections: add new lessons, merge with related existing entries, rewrite or drop entries that newer evidence contradicts.
+     - If the resulting file exceeds the compression threshold (§12, default 8K tokens), distill the least-recently-referenced entries into a "distilled prior art" bullet list at the end of the file.
+  
+  The curation step is a Claude reasoning pass, not a scripted transform — the agent reads both the existing file and the new reflections and writes back an updated, deduped, bounded file. "Notable" reflections are those flagged during `skillgoid-loop` as failure modes, unexpected tool/library behavior, or surprising design wins. Non-notable iteration records stay project-local in `iterations/*.json` and are not promoted.
 
 ### 14.7 `skillgoid-adapter-python`
 
