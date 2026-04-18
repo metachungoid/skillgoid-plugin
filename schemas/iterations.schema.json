@@ -10,11 +10,9 @@
     "ended_at": {"type": "string"},
     "gates_run": {"type": "array", "items": {"type": "string"}},
     "gate_report": {
-      "type": "object",
-      "required": ["passed", "results"],
-      "properties": {
-        "passed": {"type": "boolean"},
-        "results": {
+      "description": "Gate results — either a flat array (natural subagent output) or the legacy object form {passed, results}.",
+      "oneOf": [
+        {
           "type": "array",
           "items": {
             "type": "object",
@@ -29,9 +27,31 @@
             "additionalProperties": true
           }
         },
-        "error": {"type": "string"}
-      },
-      "additionalProperties": true
+        {
+          "type": "object",
+          "required": ["passed", "results"],
+          "properties": {
+            "passed": {"type": "boolean"},
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["gate_id", "passed"],
+                "properties": {
+                  "gate_id": {"type": "string"},
+                  "passed": {"type": "boolean"},
+                  "stdout": {"type": "string"},
+                  "stderr": {"type": "string"},
+                  "hint": {"type": "string"}
+                },
+                "additionalProperties": true
+              }
+            },
+            "error": {"type": "string"}
+          },
+          "additionalProperties": true
+        }
+      ]
     },
     "reflection": {"type": "string"},
     "notable": {"type": "boolean", "default": false},

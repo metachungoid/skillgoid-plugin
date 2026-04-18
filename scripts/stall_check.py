@@ -29,7 +29,12 @@ SIGNATURE_LEN = 16
 def signature(record: dict) -> str:
     """Compute the deterministic stall signature for an iteration record."""
     report = record.get("gate_report") or {}
-    results = report.get("results") or []
+    # gate_report may be a flat list (natural subagent output) or a dict with
+    # a "results" key (schema-canonical form).  Accept both.
+    if isinstance(report, list):
+        results = report
+    else:
+        results = report.get("results") or []
     failing = [r for r in results if not r.get("passed")]
 
     failing_ids = sorted(r.get("gate_id", "") for r in failing)
