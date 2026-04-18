@@ -31,6 +31,8 @@ Given a project path and a list of gate IDs (a subset of `.skillgoid/criteria.ya
 
 **Note:** gate entries may carry a `timeout` field (integer seconds, default 300). The adapter honors it — a gate that runs past its timeout fails cleanly with a hint, rather than hanging the loop.
 
+**Note:** gates may also carry an `env:` dict (string → string). The adapter merges it into the subprocess environment. Useful for passing `PYTHONPATH: src` on projects not yet installed via `pip install -e .`. Relative PATH/PYTHONPATH values are resolved against the project dir.
+
 4. Parse stdout as JSON. The shape is:
    ```json
    {"passed": bool, "results": [{"gate_id": str, "passed": bool, "stdout": str, "stderr": str, "hint": str}]}
