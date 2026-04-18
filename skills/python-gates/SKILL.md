@@ -28,6 +28,9 @@ Given a project path and a list of gate IDs (a subset of `.skillgoid/criteria.ya
    ```bash
    python <plugin-root>/scripts/measure_python.py --project <project_path> --criteria-stdin < <temp_criteria>
    ```
+
+**Note:** gate entries may carry a `timeout` field (integer seconds, default 300). The adapter honors it — a gate that runs past its timeout fails cleanly with a hint, rather than hanging the loop.
+
 4. Parse stdout as JSON. The shape is:
    ```json
    {"passed": bool, "results": [{"gate_id": str, "passed": bool, "stdout": str, "stderr": str, "hint": str}]}

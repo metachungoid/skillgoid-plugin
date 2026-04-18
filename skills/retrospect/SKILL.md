@@ -53,6 +53,15 @@ Step B — curate the vault
 9. Write the updated file back.
 10. Append a short log entry (optional): `~/.claude/skillgoid/vault/.log` records which projects contributed which lessons. Append-only, one line per contribution.
 
+Step C — append metrics
+11. Append a cross-project metrics line by running:
+   ```bash
+   python <plugin-root>/scripts/metrics_append.py --skillgoid-dir .skillgoid --slug <project-slug>
+   ```
+   The `<project-slug>` is a short kebab-case identifier derived from the project directory name or `goal.md` title. The helper appends one JSON line to `~/.claude/skillgoid/metrics.jsonl` capturing chunks, iterations, stalls, budget exhaustion, integration retries, and elapsed time.
+
+   This data accumulates across projects for future cross-project analytics. It never leaves your machine.
+
 ## File format for `<language>-lessons.md`
 
 ```markdown

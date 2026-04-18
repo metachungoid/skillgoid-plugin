@@ -73,6 +73,17 @@ Turns a one-line user goal into:
      ```
    - **Service:** if the user can describe a start/health-check/shutdown sequence, generate a `run-command` that does all three. Otherwise leave `integration_gates` empty and note that one should be added by hand.
    - **Unknown or ambiguous:** leave `integration_gates` empty; the user can add one later.
+
+5.2. **Default coverage gate for Python projects with pytest.** When the project is Python and `gates` includes a `pytest` gate, propose adding a `coverage` gate to `gates` as well:
+   ```yaml
+   - id: cov
+     type: coverage
+     target: "<package-name>"   # e.g., mypkg; default "." if unclear
+     min_percent: 80
+     compare_to_baseline: false  # opt in later if desired
+   ```
+   Omit for non-Python projects or when the user explicitly opts out. `compare_to_baseline: false` by default — users who want regression detection flip it to `true` once a solid baseline exists.
+
 6. **Show both files to the user for approval** before returning. Offer to add/remove gates.
 7. **Validate** `criteria.yaml` against `schemas/criteria.schema.json` (run `python -c "import json,yaml,jsonschema; jsonschema.validate(yaml.safe_load(open('.skillgoid/criteria.yaml')), json.load(open('<plugin-root>/schemas/criteria.schema.json')))"`). If validation fails, fix and retry.
 
