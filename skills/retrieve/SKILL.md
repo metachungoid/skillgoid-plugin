@@ -29,7 +29,17 @@ If the directory doesn't exist, create it (empty).
    b. Obvious toolchain files in the project root: `pyproject.toml` → python; `package.json` → node; `go.mod` → go; `Cargo.toml` → rust.
    c. Language keywords in `rough_goal` ("python", "fastapi", "react", "rust CLI", etc.).
    d. Fall back to: ask the user.
-2. **Read** `~/.claude/skillgoid/vault/<language>-lessons.md` if it exists. If not, note "no prior lessons for <language>".
+2. **Read** `~/.claude/skillgoid/vault/<language>-lessons.md` if it exists. Before surfacing lessons, filter by the current Skillgoid plugin version:
+
+   ```bash
+   python <plugin-root>/scripts/vault_filter.py \
+       --lessons-file ~/.claude/skillgoid/vault/<language>-lessons.md \
+       --plugin-json <plugin-root>/.claude-plugin/plugin.json
+   ```
+
+   The helper emits JSON: `{"active": [...], "resolved": [...]}` (each is a list of lesson titles). Surface the **active** lessons as current advice; mention resolved lessons only if the user explicitly asks for history ("what lessons have been superseded?"). Each active lesson's `Status:` line (if any) hints at which release resolved a PAST issue — carry through intact.
+
+   If the vault file doesn't exist, note "no prior lessons for <language>". If `vault_filter.py` can't determine the plugin version (malformed `plugin.json` or file missing), treat all lessons as active — fail-open to avoid hiding lessons the user might need.
 3. **Read** `~/.claude/skillgoid/vault/meta-lessons.md` if it exists.
 4. **Summarize relevance:** reason over both files and surface the 2–5 lessons most relevant to `rough_goal`. Quote the lesson headings verbatim so the user can recognize them.
 5. **Return a short briefing:**
