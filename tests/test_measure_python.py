@@ -88,3 +88,54 @@ def test_malformed_yaml_returns_error_json(tmp_path: Path):
     report = json.loads(result.stdout)
     assert report["passed"] is False
     assert "error" in report
+
+
+PASSING = ROOT / "tests" / "fixtures" / "passing-project"
+FAILING = ROOT / "tests" / "fixtures" / "failing-project"
+
+
+def test_pytest_gate_passing():
+    criteria = """
+gates:
+  - id: pytest
+    type: pytest
+    args: ["-q"]
+"""
+    report = run_cli(criteria, PASSING)
+    assert report["passed"] is True
+    assert report["results"][0]["gate_id"] == "pytest"
+
+
+def test_pytest_gate_failing():
+    criteria = """
+gates:
+  - id: pytest
+    type: pytest
+    args: ["-q"]
+"""
+    report = run_cli(criteria, FAILING)
+    assert report["passed"] is False
+    assert "FAIL" in report["results"][0]["stdout"] or "failed" in report["results"][0]["stdout"].lower()
+
+
+def test_ruff_gate_passing():
+    criteria = """
+gates:
+  - id: lint
+    type: ruff
+"""
+    report = run_cli(criteria, PASSING)
+    assert report["passed"] is True
+
+
+def test_ruff_gate_failing():
+    criteria = """
+gates:
+  - id: lint
+    type: ruff
+"""
+    report = run_cli(criteria, FAILING)
+    assert report["passed"] is False
+    # ruff should flag the unused os import
+    stdout_lower = report["results"][0]["stdout"].lower()
+    assert "os" in stdout_lower or "unused" in stdout_lower or "f401" in stdout_lower

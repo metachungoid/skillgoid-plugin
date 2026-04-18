@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, asdict
@@ -45,8 +46,42 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
     return GateResult(gate["id"], passed, out, err, hint)
 
 
+def _gate_pytest(gate: dict, project: Path) -> GateResult:
+    args = gate.get("args") or []
+    env_path = str(project / "src")
+    env = {**os.environ, "PYTHONPATH": env_path + ":" + os.environ.get("PYTHONPATH", "")}
+    proc = subprocess.run(
+        [sys.executable, "-m", "pytest", *args],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    passed = proc.returncode == 0
+    hint = "" if passed else "pytest exited nonzero — read stdout for failing test names"
+    return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
+
+
+def _gate_ruff(gate: dict, project: Path) -> GateResult:
+    args = gate.get("args") or ["check", "--isolated", "."]
+    ruff_bin = str(Path(sys.executable).parent / "ruff")
+    proc = subprocess.run(
+        [ruff_bin, *args],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    passed = proc.returncode == 0
+    hint = "" if passed else "ruff flagged lint issues — fix or add to ignore config"
+    return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
+
+
 GATE_DISPATCH = {
     "run-command": _gate_run_command,
+    "pytest": _gate_pytest,
+    "ruff": _gate_ruff,
 }
 
 
