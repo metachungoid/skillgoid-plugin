@@ -208,11 +208,12 @@ def _gate_import_clean(gate: dict, project: Path) -> GateResult:
     module = gate.get("module")
     if not module:
         return GateResult(gate["id"], False, "", "", "missing `module` field; add `module: <name>`")
-    existing = os.environ.get("PYTHONPATH", "")
-    env = {
-        **os.environ,
-        "PYTHONPATH": str(project / "src") + (os.pathsep + existing if existing else ""),
-    }
+    gate_env = gate.get("env") or {}
+    env = _merge_env(project, gate_env)
+    if "PYTHONPATH" not in gate_env:
+        env_path = str(project / "src")
+        existing = os.environ.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = env_path + (os.pathsep + existing if existing else "")
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
     try:
         proc = subprocess.run(
