@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
@@ -204,6 +205,70 @@ def _gate_cli_command_runs(gate: dict, project: Path) -> GateResult:
     return GateResult(gate["id"], passed, out, err, "; ".join(hint_parts))
 
 
+def _gate_coverage(gate: dict, project: Path) -> GateResult:
+    target = gate.get("target") or "."
+    min_percent = gate.get("min_percent", 80)
+    timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
+
+    # Env with src on PYTHONPATH (same pattern as _gate_pytest)
+    env_path = str(project / "src")
+    existing = os.environ.get("PYTHONPATH", "")
+    env = {**os.environ, "PYTHONPATH": env_path + (os.pathsep + existing if existing else "")}
+
+    # Write coverage JSON to a tmp file to avoid polluting project root
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".json", delete=False, dir=str(project)
+    ) as tf:
+        cov_path = Path(tf.name)
+
+    try:
+        try:
+            proc = subprocess.run(
+                [sys.executable, "-m", "pytest",
+                 f"--cov={target}",
+                 f"--cov-report=json:{cov_path}",
+                 "--cov-report=",  # suppress terminal report
+                 "-q"],
+                cwd=project,
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired as exc:
+            out = (exc.stdout or b"").decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+            err = (exc.stderr or b"").decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+            return GateResult(gate["id"], False, out, err,
+                              f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
+
+        if not cov_path.exists() or cov_path.stat().st_size == 0:
+            return GateResult(
+                gate["id"], False, proc.stdout, proc.stderr,
+                "coverage report not generated — is pytest-cov installed in the target project?",
+            )
+
+        try:
+            cov_data = json.loads(cov_path.read_text())
+            percent = float(cov_data["totals"]["percent_covered"])
+        except Exception as exc:
+            return GateResult(gate["id"], False, proc.stdout, proc.stderr,
+                              f"failed to parse coverage.json: {exc}")
+
+        stdout_summary = f"coverage: {percent:.1f}%"
+        if percent < min_percent:
+            return GateResult(
+                gate["id"], False, stdout_summary, proc.stderr,
+                f"coverage {percent:.1f}% below floor {min_percent}%",
+            )
+        return GateResult(gate["id"], True, stdout_summary, proc.stderr, "")
+    finally:
+        try:
+            cov_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
 GATE_DISPATCH = {
     "run-command": _gate_run_command,
     "pytest": _gate_pytest,
@@ -211,6 +276,7 @@ GATE_DISPATCH = {
     "mypy": _gate_mypy,
     "import-clean": _gate_import_clean,
     "cli-command-runs": _gate_cli_command_runs,
+    "coverage": _gate_coverage,
 }
 
 

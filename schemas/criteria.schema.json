@@ -19,13 +19,16 @@
         "required": ["id", "type"],
         "properties": {
           "id": {"type": "string"},
-          "type": {"type": "string", "enum": ["pytest", "ruff", "mypy", "import-clean", "cli-command-runs", "run-command"]},
+          "type": {"type": "string", "enum": ["pytest", "ruff", "mypy", "import-clean", "cli-command-runs", "run-command", "coverage"]},
           "args": {"type": "array", "items": {"type": "string"}},
           "command": {"type": "array", "items": {"type": "string"}},
           "expect_exit": {"type": "integer"},
           "expect_stdout_match": {"type": "string"},
           "module": {"type": "string"},
-          "timeout": {"type": "integer", "minimum": 1, "default": 300, "description": "Seconds before the gate is killed and fails. Default 300."}
+          "timeout": {"type": "integer", "minimum": 1, "default": 300, "description": "Seconds before the gate is killed and fails. Default 300."},
+          "target": {"type": "string", "description": "Package or path to measure coverage for. Default '.'"},
+          "min_percent": {"type": "integer", "minimum": 0, "maximum": 100, "default": 80},
+          "compare_to_baseline": {"type": "boolean", "default": false}
         },
         "additionalProperties": true
       }
@@ -38,13 +41,16 @@
         "required": ["id", "type"],
         "properties": {
           "id": {"type": "string"},
-          "type": {"type": "string", "enum": ["pytest", "ruff", "mypy", "import-clean", "cli-command-runs", "run-command"]},
+          "type": {"type": "string", "enum": ["pytest", "ruff", "mypy", "import-clean", "cli-command-runs", "run-command", "coverage"]},
           "args": {"type": "array", "items": {"type": "string"}},
           "command": {"type": "array", "items": {"type": "string"}},
           "expect_exit": {"type": "integer"},
           "expect_stdout_match": {"type": "string"},
           "module": {"type": "string"},
-          "timeout": {"type": "integer", "minimum": 1, "default": 300, "description": "Seconds before the gate is killed and fails. Default 300."}
+          "timeout": {"type": "integer", "minimum": 1, "default": 300, "description": "Seconds before the gate is killed and fails. Default 300."},
+          "target": {"type": "string", "description": "Package or path to measure coverage for. Default '.'"},
+          "min_percent": {"type": "integer", "minimum": 0, "maximum": 100, "default": 80},
+          "compare_to_baseline": {"type": "boolean", "default": false}
         },
         "additionalProperties": true
       }
