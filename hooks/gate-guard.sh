@@ -24,11 +24,12 @@ sg = Path(sys.argv[1])
 iters_dir = Path(sys.argv[2])
 
 try:
-    iter_files = sorted(iters_dir.glob("*.json"))
+    iter_files = list(iters_dir.glob("*.json"))
     if not iter_files:
         sys.exit(0)
 
-    latest = iter_files[-1]
+    # Sort by mtime descending — most recently written iteration is the active one.
+    latest = max(iter_files, key=lambda p: p.stat().st_mtime)
     try:
         rec = json.loads(latest.read_text())
     except Exception:
@@ -36,7 +37,14 @@ try:
 
     exit_reason = rec.get("exit_reason", "in_progress")
     report = rec.get("gate_report", {})
-    passed = report.get("passed", True)
+
+    # gate_report may be a flat list (natural subagent output) or a dict {passed, results}.
+    if isinstance(report, list):
+        results_list = report
+        passed = all(r.get("passed", True) for r in results_list)
+    else:
+        results_list = report.get("results", [])
+        passed = report.get("passed", True)
 
     if passed or exit_reason == "success":
         sys.exit(0)
@@ -64,7 +72,7 @@ try:
     if iteration >= max_attempts or exit_reason in ("budget_exhausted", "stalled"):
         sys.exit(0)
 
-    failing_results = [r for r in report.get("results", []) if not r.get("passed")]
+    failing_results = [r for r in results_list if not r.get("passed")]
     failing_ids = [r.get("gate_id", "?") for r in failing_results]
 
     # Pick top 2 hints by length (most informative)
