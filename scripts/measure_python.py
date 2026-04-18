@@ -50,8 +50,15 @@ def _run(cmd: list[str], cwd: Path, timeout: int | None = None) -> tuple[int, st
 
 def _merge_env(project: Path, gate_env: dict) -> dict:
     """Merge gate env: overrides onto os.environ. Relative paths in known
-    path-like vars (PYTHONPATH, PATH) are resolved against project dir."""
-    merged = {**os.environ}
+    path-like vars (PYTHONPATH, PATH) are resolved against project dir.
+
+    Always exports SKILLGOID_PYTHON=sys.executable so shell command strings
+    (e.g., ["bash", "-c", "$SKILLGOID_PYTHON -m myproj"]) can reference a
+    guaranteed python binary without worrying about whether `python` is on PATH.
+    User-provided gate env: CAN override SKILLGOID_PYTHON if needed (e.g., to
+    test against a different interpreter).
+    """
+    merged = {**os.environ, "SKILLGOID_PYTHON": sys.executable}
     for k, v in (gate_env or {}).items():
         if k in ("PYTHONPATH", "PATH"):
             parts = []

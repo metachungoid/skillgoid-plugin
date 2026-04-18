@@ -65,3 +65,34 @@ gates:
 """
     report = run_cli(criteria, tmp_path)
     assert report["passed"] is True
+
+
+def test_skillgoid_python_env_is_exported(tmp_path: Path):
+    """SKILLGOID_PYTHON should be set to sys.executable in the gate subprocess."""
+    criteria = """
+gates:
+  - id: check
+    type: run-command
+    command: ["sh", "-c", "echo $SKILLGOID_PYTHON"]
+    expect_exit: 0
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is True
+    stdout = report["results"][0]["stdout"].strip()
+    assert stdout.endswith("python") or stdout.endswith("python3") or "/python" in stdout, \
+        f"expected python path, got: {stdout!r}"
+
+
+def test_shell_string_uses_skillgoid_python_successfully(tmp_path: Path):
+    """A bash -c command referencing $SKILLGOID_PYTHON should run the right interpreter."""
+    criteria = """
+gates:
+  - id: check
+    type: run-command
+    command: ["bash", "-c", "$SKILLGOID_PYTHON -c 'print(42)'"]
+    expect_exit: 0
+    expect_stdout_match: "42"
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is True
+    assert "42" in report["results"][0]["stdout"]
