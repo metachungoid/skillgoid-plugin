@@ -2,6 +2,26 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## [0.7.0] — 2026-04-18
+
+### Changed
+- Gate `env:` field is now honored by every gate type (previously only `run-command` and `cli-command-runs`). Backward-compatible: the default `<project>/src` PYTHONPATH injection for pytest/import-clean/coverage is preserved when gate `env:` doesn't specify PYTHONPATH.
+- Iteration files are now named `<chunk_id>-NNN.json` (previously `NNN.json`). Readers handle both conventions for back-compat.
+- `scripts/git_iter_commit.py` now accepts `--chunks-file` and uses each chunk's `paths:` field (new, optional in `chunks.yaml`) to stage only the chunk's own files. Falls back to `git add -A` with a stderr warning when `paths:` is absent.
+- `scripts/git_iter_commit.py` now resolves a relative `--iteration` path against `--project` (previously required cwd to match project root).
+- `scripts/git_iter_commit.py` now hard-fails (exit 2) on unreadable iteration JSON, and exits 1 when a git operation fails (previously silently soft-failed in both cases, hiding missed commits).
+- `clarify` skill proposes `coverage` under `integration_gates:` by default, not inside per-chunk `gate_ids` (avoids false-positive failures from cross-chunk scope).
+- `scripts/measure_python.py` `_gate_coverage` writes its scratch file to `tempfile.gettempdir()` instead of the project dir.
+
+### Added
+- Optional `paths:` field in `chunks.yaml` schema.
+- 17 new tests covering env-in-every-handler, scoped git add, parallel-wave disjointness, mixed iteration-filename back-compat.
+
+### Backward compatibility
+- Existing `criteria.yaml`: unchanged behavior. Opt into broader env-support by adding `env:` to any gate.
+- Existing `chunks.yaml`: unchanged behavior. Opt into scoped commits by adding `paths:` to chunks.
+- Mixed-filename iteration dirs (v0.6 `NNN.json` + v0.7 `<chunk_id>-NNN.json`) are readable by all consumers.
+
 ## [0.6.0] — 2026-04-18
 
 ### Added

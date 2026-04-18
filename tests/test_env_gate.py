@@ -96,3 +96,124 @@ gates:
     report = run_cli(criteria, tmp_path)
     assert report["passed"] is True
     assert "42" in report["results"][0]["stdout"]
+
+
+def test_pytest_honors_env_pythonpath(tmp_path: Path):
+    """F17: gate-level env: PYTHONPATH should win over the hardcoded <project>/src."""
+    # Lay out a package under py/src/ (non-standard location)
+    pkg = tmp_path / "py" / "src" / "mypkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("VAL = 42\n")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_it.py").write_text(
+        "from mypkg import VAL\n"
+        "def test_val(): assert VAL == 42\n"
+    )
+    criteria = """
+gates:
+  - id: py_test
+    type: pytest
+    args: ["tests/"]
+    env:
+      PYTHONPATH: "py/src"
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is True, f"results: {report['results']}"
+
+
+def test_import_clean_honors_env_pythonpath(tmp_path: Path):
+    """F17: gate env: PYTHONPATH respected by import-clean."""
+    pkg = tmp_path / "py" / "src" / "mypkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    criteria = """
+gates:
+  - id: imp
+    type: import-clean
+    module: mypkg
+    env:
+      PYTHONPATH: "py/src"
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is True, f"results: {report['results']}"
+
+
+def test_coverage_honors_env_pythonpath(tmp_path: Path):
+    """F17: gate env: PYTHONPATH respected by coverage."""
+    pkg = tmp_path / "py" / "src" / "mypkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("def f(): return 1\n")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_it.py").write_text(
+        "from mypkg import f\n"
+        "def test_f(): assert f() == 1\n"
+    )
+    criteria = """
+gates:
+  - id: cov
+    type: coverage
+    target: "mypkg"
+    min_percent: 50
+    env:
+      PYTHONPATH: "py/src"
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is True, f"results: {report['results']}"
+
+
+def test_ruff_honors_env(tmp_path: Path):
+    """Ruff gate should pass env: through to the subprocess."""
+    (tmp_path / "a.py").write_text("x = 1\n")
+    criteria = """
+gates:
+  - id: ruff_env
+    type: ruff
+    args: ["check", "."]
+    env:
+      RUFF_CACHE_DIR: "/tmp/ruff-cache-skillgoid-test"
+"""
+    report = run_cli(criteria, tmp_path)
+    # Pass if ruff is installed; env must not cause a crash.
+    # (We can't directly observe RUFF_CACHE_DIR from the test, but the gate
+    # running cleanly with env specified is the baseline assertion.)
+    assert report["results"][0]["gate_id"] == "ruff_env"
+    assert report["results"][0]["passed"] is True
+
+
+def test_mypy_honors_env(tmp_path: Path):
+    """Mypy gate should pass env: through to the subprocess."""
+    (tmp_path / "a.py").write_text("x: int = 1\n")
+    criteria = """
+gates:
+  - id: mypy_env
+    type: mypy
+    args: ["a.py"]
+    env:
+      MYPY_CACHE_DIR: "/tmp/mypy-cache-skillgoid-test"
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["results"][0]["gate_id"] == "mypy_env"
+    assert report["results"][0]["passed"] is True
+
+
+def test_pytest_default_pythonpath_when_env_absent(tmp_path: Path):
+    """Back-compat: absent gate env still gets <project>/src on PYTHONPATH."""
+    pkg = tmp_path / "src" / "mypkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("VAL = 7\n")
+    tests_dir = tmp_path / "tests"
+    tests_dir.mkdir()
+    (tests_dir / "test_it.py").write_text(
+        "from mypkg import VAL\n"
+        "def test_val(): assert VAL == 7\n"
+    )
+    criteria = """
+gates:
+  - id: py_test
+    type: pytest
+    args: ["tests/"]
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is True, f"results: {report['results']}"

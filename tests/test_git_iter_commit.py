@@ -117,3 +117,190 @@ def test_cli_noop_on_non_git_exits_zero(tmp_path: Path):
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_iteration_relative_path_resolves_against_project(tmp_path, monkeypatch):
+    """F25: --iteration as a relative path should resolve against --project,
+    not caller's cwd."""
+    import subprocess
+    from scripts.git_iter_commit import main
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(project), "commit", "--allow-empty", "-qm", "init"], check=True)
+
+    iters = project / ".skillgoid" / "iterations"
+    iters.mkdir(parents=True)
+    iter_file = iters / "scaffold-001.json"
+    iter_file.write_text(json.dumps({
+        "iteration": 1, "chunk_id": "scaffold",
+        "gate_report": {"passed": True, "results": []},
+        "exit_reason": "success",
+    }))
+
+    # Create a stub chunks.yaml (v0.7 flow requires it for paths resolution)
+    (project / ".skillgoid" / "chunks.yaml").write_text(
+        "chunks:\n  - id: scaffold\n    description: s\n    gate_ids: [g]\n"
+    )
+
+    # Call main from a cwd that is NOT the project
+    monkeypatch.chdir(tmp_path)
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", ".skillgoid/iterations/scaffold-001.json",
+        "--chunks-file", ".skillgoid/chunks.yaml",
+    ])
+    assert exit_code == 0
+    log = subprocess.run(["git", "-C", str(project), "log", "--oneline"],
+                         capture_output=True, text=True, check=True)
+    assert "iter 1 of chunk scaffold" in log.stdout
+
+
+def test_iteration_unreadable_hard_fails(tmp_path, capsys):
+    """v0.7: replace soft-fail with exit 2 + stderr."""
+    from scripts.git_iter_commit import main
+    project = tmp_path / "proj"
+    project.mkdir()
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", "/nonexistent/path.json",
+        "--chunks-file", "/nonexistent/chunks.yaml",
+    ])
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "cannot read iteration" in captured.err
+
+
+def _init_git_project(project: Path) -> None:
+    import subprocess
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(project), "commit", "--allow-empty", "-qm", "init"], check=True)
+
+
+def test_paths_scopes_git_add(tmp_path):
+    """F26: chunk with paths: only stages those paths in its commit."""
+    import subprocess
+    from scripts.git_iter_commit import main
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    _init_git_project(project)
+
+    (project / "a.py").write_text("pass\n")
+    (project / "b.py").write_text("pass\n")
+    (project / ".skillgoid").mkdir()
+    (project / ".skillgoid" / "iterations").mkdir()
+
+    iter_file = project / ".skillgoid" / "iterations" / "chunk_a-001.json"
+    iter_file.write_text(json.dumps({
+        "iteration": 1, "chunk_id": "chunk_a",
+        "gate_report": {"passed": True, "results": []},
+        "exit_reason": "success",
+    }))
+
+    chunks_file = project / ".skillgoid" / "chunks.yaml"
+    chunks_file.write_text(
+        "chunks:\n"
+        "  - id: chunk_a\n"
+        "    description: a\n"
+        "    gate_ids: [g]\n"
+        "    paths: [a.py]\n"
+        "  - id: chunk_b\n"
+        "    description: b\n"
+        "    gate_ids: [g]\n"
+        "    paths: [b.py]\n"
+    )
+
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", str(iter_file),
+        "--chunks-file", str(chunks_file),
+    ])
+    assert exit_code == 0
+
+    files = subprocess.run(
+        ["git", "-C", str(project), "show", "--name-only", "--format=", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip().split("\n")
+    assert "a.py" in files
+    assert ".skillgoid/iterations/chunk_a-001.json" in files
+    assert "b.py" not in files
+
+
+def test_missing_paths_falls_back_to_add_all_with_warning(tmp_path, capsys):
+    """v0.7 back-compat: chunk without paths: uses git add -A and warns."""
+    import subprocess
+    from scripts.git_iter_commit import main
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    _init_git_project(project)
+    (project / "a.py").write_text("pass\n")
+    (project / ".skillgoid").mkdir()
+    (project / ".skillgoid" / "iterations").mkdir()
+
+    iter_file = project / ".skillgoid" / "iterations" / "legacy-001.json"
+    iter_file.write_text(json.dumps({
+        "iteration": 1, "chunk_id": "legacy",
+        "gate_report": {"passed": True, "results": []},
+        "exit_reason": "success",
+    }))
+
+    chunks_file = project / ".skillgoid" / "chunks.yaml"
+    chunks_file.write_text(
+        "chunks:\n"
+        "  - id: legacy\n"
+        "    description: no paths\n"
+        "    gate_ids: [g]\n"
+    )
+
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", str(iter_file),
+        "--chunks-file", str(chunks_file),
+    ])
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "no paths: declared" in captured.err
+    assert "falling back" in captured.err
+
+    files = subprocess.run(
+        ["git", "-C", str(project), "show", "--name-only", "--format=", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip().split("\n")
+    assert "a.py" in files
+
+
+def test_missing_chunks_file_arg_falls_back_to_add_all(tmp_path, capsys):
+    """v0.7: --chunks-file omitted entirely → fall back to v0.6 behavior."""
+    import subprocess
+    from scripts.git_iter_commit import main
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    _init_git_project(project)
+    (project / "a.py").write_text("pass\n")
+    (project / ".skillgoid").mkdir()
+    (project / ".skillgoid" / "iterations").mkdir()
+    iter_file = project / ".skillgoid" / "iterations" / "x-001.json"
+    iter_file.write_text(json.dumps({
+        "iteration": 1, "chunk_id": "x",
+        "gate_report": {"passed": True, "results": []},
+        "exit_reason": "success",
+    }))
+
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", str(iter_file),
+    ])
+    assert exit_code == 0
+    files = subprocess.run(
+        ["git", "-C", str(project), "show", "--name-only", "--format=", "HEAD"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip().split("\n")
+    assert "a.py" in files

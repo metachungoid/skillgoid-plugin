@@ -213,3 +213,53 @@ def test_criteria_gate_env_values_must_be_strings():
     data = {"gates": [{"id": "g", "type": "pytest", "env": {"N": 42}}]}
     errors = list(_validator("criteria.schema.json").iter_errors(data))
     assert any(e.validator == "type" for e in errors)
+
+
+# ----- v0.7 additions -----
+
+
+def test_chunk_with_paths_field_validates():
+    """v0.7: chunks may declare `paths:` for commit-scoping."""
+    chunks = {
+        "chunks": [
+            {
+                "id": "py_db",
+                "description": "Python sqlite layer",
+                "gate_ids": ["py_lint", "py_test"],
+                "paths": ["py/src/taskbridge/db.py", "py/tests/test_db.py"],
+            }
+        ]
+    }
+    errors = list(_validator("chunks.schema.json").iter_errors(chunks))
+    assert errors == []
+
+
+def test_chunk_without_paths_still_validates():
+    """v0.7: paths: is optional; existing criteria without it still validate."""
+    chunks = {
+        "chunks": [
+            {
+                "id": "legacy_chunk",
+                "description": "No paths declared",
+                "gate_ids": ["lint"],
+            }
+        ]
+    }
+    errors = list(_validator("chunks.schema.json").iter_errors(chunks))
+    assert errors == []
+
+
+def test_chunk_paths_must_be_array_of_strings():
+    """v0.7: paths: items must be strings."""
+    chunks = {
+        "chunks": [
+            {
+                "id": "bad",
+                "description": "x",
+                "gate_ids": ["g"],
+                "paths": [{"not": "a string"}],
+            }
+        ]
+    }
+    errors = list(_validator("chunks.schema.json").iter_errors(chunks))
+    assert any(e.validator == "type" for e in errors)

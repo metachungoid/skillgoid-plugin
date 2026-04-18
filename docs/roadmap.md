@@ -50,6 +50,14 @@ One-item micro-release driven by indexgrep evidence:
 Spec: `docs/superpowers/specs/2026-04-18-skillgoid-v0.6-shell-python.md`
 Plan: `docs/superpowers/plans/2026-04-18-skillgoid-v0.6.md`
 
+### v0.7 — Correctness Bundle (2026-04-18)
+Two items driven by the `taskbridge` polyglot stress run:
+- Gate `env:` honored by every gate type (pytest, import-clean, coverage, ruff, mypy — previously hardcoded)
+- Parallel-wave safety: per-chunk iteration filenames + `paths:`-scoped commits (kills the filename race + git-add-A cross-contamination observed in v0.5's parallel feature)
+- Folded in: `git_iter_commit.py --iteration` path resolution (F25); coverage → integration_gates by default in clarify
+Spec: `docs/superpowers/specs/2026-04-18-skillgoid-v0.7-correctness-bundle.md`
+Plan: `docs/superpowers/plans/2026-04-18-skillgoid-v0.7.md`
+
 ## Dropped from roadmap (v0.6 decision)
 
 - **Plan refinement mid-build.** Four real runs, zero evidence. Formally dropped. Re-evaluation would require qualitatively different project shapes (research-grade builds with genuine decomposition uncertainty) AND two+ subsequent runs still producing evidence for the need.
@@ -66,7 +74,13 @@ Items kept deferred because no real run has exercised them. Don't revive without
 - **Dashboards / HTML rendering.** `/skillgoid:stats` markdown sufficient.
 - **Tighter vault retrieval.** 5 entries after 4 projects; no scale pressure.
 
-## How to pick up v0.7
+## How to pick up v0.8
+
+Additional for v0.8 (driven by taskbridge findings deferred from v0.7):
+- Polyglot language-support shape (`languages[]` migration, polyglot clarify defaults, node-gates adapter) waits on 2-3 more polyglot project runs before committing to a design. One polyglot run exposed the correctness issues v0.7 ships; it is not enough evidence to commit to a full polyglot architecture.
+- Other deferred from v0.7 findings doc: structured hint parity for `run-command` gates (F27), feasibility-phase awareness of Node tooling (F12), multi-language vault/metrics (F7+F1+F20+F21), `metrics_append` recording per-chunk languages (F20).
+
+Original v0.7 intake guidance (now historical — the taskbridge run produced the v0.7 evidence):
 
 1. Run Skillgoid on a **qualitatively different** project shape (not another python CLI). Real candidates:
    - A polyglot project (Python backend + Node CLI wrapper) — would need `node-gates` adapter first.

@@ -26,7 +26,7 @@ Given a stuck chunk and a one-sentence human hint, re-dispatches the chunk's sub
 ## Procedure
 
 1. **Validate chunk_id** — must exist in `.skillgoid/chunks.yaml`. If not, error out.
-2. **Read recent state** — the latest iteration for this chunk in `.skillgoid/iterations/`.
+2. **Read recent state** — the latest iteration for this chunk in `.skillgoid/iterations/`. Since v0.7, iteration files are named `<chunk_id>-NNN.json`, so finding a chunk's latest iteration is `sorted(iters_dir.glob(f"{chunk_id}-*.json"))[-1]`. Pre-v0.7 projects may have unprefixed `NNN.json` files; if you don't find a `<chunk_id>-*.json` match, fall back to scanning all `*.json` files and filter by the `chunk_id` field in the record body.
    - If `exit_reason` ∈ {`success`} — warn: "this chunk already succeeded. Unstick is for stalled chunks." Ask user to confirm before proceeding.
    - If `exit_reason` ∈ {`stalled`, `budget_exhausted`} — proceed.
    - If `exit_reason == "in_progress"` — the loop is still running or was interrupted. Unstick in this case means "restart with hint" — ask user to confirm.

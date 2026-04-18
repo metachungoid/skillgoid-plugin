@@ -122,9 +122,12 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
 def _gate_pytest(gate: dict, project: Path) -> GateResult:
     args = gate.get("args") or []
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
-    env_path = str(project / "src")
-    existing = os.environ.get("PYTHONPATH", "")
-    env = {**os.environ, "PYTHONPATH": env_path + (os.pathsep + existing if existing else "")}
+    gate_env = gate.get("env") or {}
+    env = _merge_env(project, gate_env)
+    if "PYTHONPATH" not in gate_env:
+        env_path = str(project / "src")
+        existing = os.environ.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = env_path + (os.pathsep + existing if existing else "")
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", *args],
@@ -154,10 +157,12 @@ def _gate_ruff(gate: dict, project: Path) -> GateResult:
         )
     args = gate.get("args") or ["check", "."]
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
+    env = _merge_env(project, gate.get("env") or {})
     try:
         proc = subprocess.run(
             [str(ruff_bin), *args],
             cwd=project,
+            env=env,
             capture_output=True,
             text=True,
             check=False,
@@ -182,10 +187,12 @@ def _gate_mypy(gate: dict, project: Path) -> GateResult:
         )
     args = gate.get("args") or ["."]
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
+    env = _merge_env(project, gate.get("env") or {})
     try:
         proc = subprocess.run(
             [str(mypy_bin), *args],
             cwd=project,
+            env=env,
             capture_output=True,
             text=True,
             check=False,
@@ -205,11 +212,12 @@ def _gate_import_clean(gate: dict, project: Path) -> GateResult:
     module = gate.get("module")
     if not module:
         return GateResult(gate["id"], False, "", "", "missing `module` field; add `module: <name>`")
-    existing = os.environ.get("PYTHONPATH", "")
-    env = {
-        **os.environ,
-        "PYTHONPATH": str(project / "src") + (os.pathsep + existing if existing else ""),
-    }
+    gate_env = gate.get("env") or {}
+    env = _merge_env(project, gate_env)
+    if "PYTHONPATH" not in gate_env:
+        env_path = str(project / "src")
+        existing = os.environ.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = env_path + (os.pathsep + existing if existing else "")
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
     try:
         proc = subprocess.run(
@@ -283,14 +291,18 @@ def _gate_coverage(gate: dict, project: Path) -> GateResult:
     min_percent = gate.get("min_percent", 80)
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
 
-    # Env with src on PYTHONPATH (same pattern as _gate_pytest)
-    env_path = str(project / "src")
-    existing = os.environ.get("PYTHONPATH", "")
-    env = {**os.environ, "PYTHONPATH": env_path + (os.pathsep + existing if existing else "")}
+    gate_env = gate.get("env") or {}
+    env = _merge_env(project, gate_env)
+    if "PYTHONPATH" not in gate_env:
+        env_path = str(project / "src")
+        existing = os.environ.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = env_path + (os.pathsep + existing if existing else "")
 
-    # Write coverage JSON to a tmp file to avoid polluting project root
+    # Write coverage JSON to system tempdir (not project dir) so a killed gate
+    # never leaves a stray file in the project tree that `git add -A` could
+    # pick up. The finally-block cleanup still applies.
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, dir=str(project)
+        mode="w", suffix=".json", delete=False, dir=tempfile.gettempdir()
     ) as tf:
         cov_path = Path(tf.name)
 

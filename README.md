@@ -31,6 +31,19 @@ claude plugin install .
 5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
 6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
 
+## What's new in v0.7
+
+Correctness bundle driven by the `taskbridge` polyglot stress run:
+
+- **Gate `env:` honored by every gate type.** Previously `pytest`, `import-clean`, and `coverage` hardcoded `PYTHONPATH=<project>/src` and silently ignored gate-level `env:`; `ruff` and `mypy` didn't accept env at all. All 7 handlers now merge gate `env:` into the subprocess environment. Backward-compatible: handlers that injected `<project>/src` by default still do so when the gate doesn't specify its own PYTHONPATH.
+- **Parallel-wave correctness — per-chunk iteration filenames + `paths:`-scoped commits.** Iteration files are now `<chunk_id>-NNN.json` (previously `NNN.json`) so concurrent subagents write to disjoint filename namespaces. `chunks.yaml` gains an optional `paths: [...]` field declaring which project paths a chunk owns; `git_iter_commit.py` uses it to stage only those paths plus the chunk's iteration file. Projects without `paths:` fall back to the v0.6 `git add -A` behavior with a stderr warning. Kills the silent cross-contamination observed in parallel waves (one chunk's commit sweeping up another chunk's files).
+- **Related fixes.** `git_iter_commit.py --iteration` now resolves against `--project` when relative (previously failed silently on relative paths unless cwd was the project root). `git_iter_commit.py` now also returns exit 1 when a git operation fails (previously silently soft-failed, hiding missed commits).
+- **Clarify no longer proposes coverage as a per-chunk gate.** It now lands in `integration_gates` by default, matching the metric's whole-package scope. Avoids false-positive failures on chunks that land before the full package is implemented.
+
+Upgrade path: existing `criteria.yaml` and `chunks.yaml` files continue to work unchanged. Add `paths:` to each chunk to opt into scoped commits for parallel waves.
+
+All changes fully backward-compatible with v0.6.
+
 ## What's new in v0.6
 
 Single fix driven by the indexgrep real-run evidence:

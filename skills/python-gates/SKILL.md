@@ -31,7 +31,9 @@ Given a project path and a list of gate IDs (a subset of `.skillgoid/criteria.ya
 
 **Note:** gate entries may carry a `timeout` field (integer seconds, default 300). The adapter honors it — a gate that runs past its timeout fails cleanly with a hint, rather than hanging the loop.
 
-**Note:** gates may also carry an `env:` dict (string → string). The adapter merges it into the subprocess environment. Useful for passing `PYTHONPATH: src` on projects not yet installed via `pip install -e .`. Relative PATH/PYTHONPATH values are resolved against the project dir.
+**Note:** gates may also carry an `env:` dict (string → string). **As of v0.7, the adapter merges it into the subprocess environment for every gate type** (run-command, cli-command-runs, pytest, import-clean, coverage, ruff, mypy). Previously only run-command and cli-command-runs honored env — v0.6 and earlier silently ignored env for the other 5 handlers. Useful for passing `PYTHONPATH: src` on projects not yet installed via `pip install -e .`. Relative PATH/PYTHONPATH values are resolved against the project dir.
+
+**Default behavior:** pytest / import-clean / coverage still inject `<project>/src` onto PYTHONPATH when the gate does not specify its own PYTHONPATH — back-compat with v0.6 projects that rely on the implicit default. To override, supply `env: {PYTHONPATH: <your-path>}` on the gate.
 
 **Note:** the adapter always exports `SKILLGOID_PYTHON=sys.executable` into the gate subprocess. Inside shell command strings (e.g., `["bash", "-c", "..."]`), reference `$SKILLGOID_PYTHON` instead of bare `python` to get a guaranteed-working interpreter path. The bare-`python` auto-resolution (v0.4) applies only to `command[0]`, so it won't help when `python` appears inside a shell pipeline. `$SKILLGOID_PYTHON` does.
 
