@@ -1,0 +1,10 @@
+chunks:
+  - id: scaffold
+    description: "Create package layout and pyproject"
+    language: python
+    gate_ids: [lint]
+  - id: core-api
+    description: "Implement core CLI commands"
+    language: python
+    gate_ids: [pytest, lint, cli_help]
+    depends_on: [scaffold]

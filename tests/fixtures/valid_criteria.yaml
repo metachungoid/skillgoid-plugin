@@ -1,0 +1,16 @@
+language: python
+loop:
+  max_attempts: 5
+gates:
+  - id: pytest
+    type: pytest
+    args: ["-q"]
+  - id: lint
+    type: ruff
+  - id: cli_help
+    type: cli-command-runs
+    command: ["myapp", "--help"]
+    expect_exit: 0
+    expect_stdout_match: "Usage:"
+acceptance:
+  - "CLI runs end-to-end on a fresh clone with only pip install -e ."

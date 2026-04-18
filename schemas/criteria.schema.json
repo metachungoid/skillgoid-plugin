@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Skillgoid criteria.yaml",
+  "type": "object",
+  "required": ["gates"],
+  "properties": {
+    "language": {"type": "string", "description": "Primary language tag, e.g. python, node"},
+    "loop": {
+      "type": "object",
+      "properties": {
+        "max_attempts": {"type": "integer", "minimum": 1, "default": 5}
+      }
+    },
+    "gates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "properties": {
+          "id": {"type": "string"},
+          "type": {"type": "string", "enum": ["pytest", "ruff", "mypy", "import-clean", "cli-command-runs", "run-command"]},
+          "args": {"type": "array", "items": {"type": "string"}},
+          "command": {"type": "array", "items": {"type": "string"}},
+          "expect_exit": {"type": "integer"},
+          "expect_stdout_match": {"type": "string"},
+          "module": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}

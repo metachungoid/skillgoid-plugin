@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Skillgoid chunks.yaml",
+  "type": "object",
+  "required": ["chunks"],
+  "properties": {
+    "chunks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description"],
+        "properties": {
+          "id": {"type": "string"},
+          "description": {"type": "string"},
+          "language": {"type": "string"},
+          "gate_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Subset of criteria.gates[].id this chunk must satisfy"
+          },
+          "depends_on": {
+            "type": "array",
+            "items": {"type": "string"}
+          }
+        }
+      }
+    }
+  }
+}
