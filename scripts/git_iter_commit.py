@@ -58,21 +58,45 @@ def _build_message(record: dict) -> str:
     )
 
 
-def commit_iteration(project: Path, record: dict) -> bool:
+def commit_iteration(
+    project: Path,
+    record: dict,
+    iteration_path: Path | None = None,
+    chunks_file: Path | None = None,
+) -> bool:
     """Commit the iteration's changes to git. Returns True if a commit was
-    made (or attempted), False if noop (non-git project) or on error."""
+    made (or attempted), False if noop (non-git project) or on error.
+
+    When `chunks_file` is provided AND the chunk referenced by record.chunk_id
+    has a `paths:` list, stage only those paths + the iteration file. Otherwise
+    fall back to `git add -A` with a stderr warning.
+    """
     if not is_git_repo(project):
         return False
 
     message = _build_message(record)
+    chunk_id = record.get("chunk_id", "")
+    scoped_paths = _resolve_scoped_paths(project, chunk_id, chunks_file, iteration_path)
 
     try:
-        subprocess.run(["git", "add", "-A"], cwd=project, check=True, capture_output=True)
+        if scoped_paths is not None:
+            subprocess.run(
+                ["git", "add", "--", *scoped_paths],
+                cwd=project, check=True, capture_output=True,
+            )
+        else:
+            sys.stderr.write(
+                f"git_iter_commit: chunk {chunk_id!r} has no paths: declared, "
+                f"falling back to 'git add -A' — consider adding paths: for "
+                f"safer parallel waves\n"
+            )
+            subprocess.run(
+                ["git", "add", "-A"],
+                cwd=project, check=True, capture_output=True,
+            )
         subprocess.run(
             ["git", "commit", "--allow-empty", "-m", message],
-            cwd=project,
-            check=True,
-            capture_output=True,
+            cwd=project, check=True, capture_output=True,
         )
     except subprocess.CalledProcessError as exc:
         stderr = exc.stderr.decode("utf-8", errors="replace") if exc.stderr else ""
@@ -81,19 +105,75 @@ def commit_iteration(project: Path, record: dict) -> bool:
     return True
 
 
+def _resolve_scoped_paths(
+    project: Path,
+    chunk_id: str,
+    chunks_file: Path | None,
+    iteration_path: Path | None,
+) -> list[str] | None:
+    """Return a list of paths (relative to project) to stage for this chunk's
+    commit, or None if no scoping info is available (caller falls back to
+    git add -A).
+    """
+    if chunks_file is None or not chunks_file.exists():
+        return None
+    try:
+        import yaml
+        data = yaml.safe_load(chunks_file.read_text()) or {}
+    except Exception:
+        return None
+    chunks = data.get("chunks") or []
+    match = next((c for c in chunks if c.get("id") == chunk_id), None)
+    if not match:
+        return None
+    paths = match.get("paths")
+    if not paths:
+        return None
+    result = list(paths)
+    # Always include the iteration file itself (project-relative)
+    if iteration_path is not None:
+        try:
+            rel = iteration_path.relative_to(project)
+            result.append(str(rel))
+        except ValueError:
+            pass  # iteration not under project — shouldn't happen post-resolve
+    return result
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Skillgoid git-per-iteration commit helper")
     ap.add_argument("--project", required=True, type=Path)
     ap.add_argument("--iteration", required=True, type=Path)
+    ap.add_argument(
+        "--chunks-file",
+        type=Path,
+        default=None,
+        help="Path to chunks.yaml (usually <project>/.skillgoid/chunks.yaml). "
+             "Used to look up the chunk's paths: for scoped git add. "
+             "If absent, falls back to 'git add -A' with a warning.",
+    )
     args = ap.parse_args(argv)
 
-    try:
-        record = json.loads(args.iteration.read_text())
-    except Exception as exc:
-        sys.stderr.write(f"git_iter_commit: cannot read iteration file: {exc}\n")
-        return 0  # soft-fail: never block the loop
+    project = args.project.resolve()
 
-    commit_iteration(args.project.resolve(), record)
+    # Resolve --iteration against --project if relative (F25).
+    iteration_path = args.iteration
+    if not iteration_path.is_absolute():
+        iteration_path = (project / iteration_path).resolve()
+
+    # Hard-fail on unreadable iteration (replaces v0.6's silent soft-fail).
+    try:
+        record = json.loads(iteration_path.read_text())
+    except Exception as exc:
+        sys.stderr.write(f"git_iter_commit: cannot read iteration at {iteration_path}: {exc}\n")
+        return 2
+
+    # Resolve --chunks-file against --project if relative.
+    chunks_file = args.chunks_file
+    if chunks_file is not None and not chunks_file.is_absolute():
+        chunks_file = (project / chunks_file).resolve()
+
+    commit_iteration(project, record, iteration_path=iteration_path, chunks_file=chunks_file)
     return 0
 
 

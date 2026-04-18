@@ -117,3 +117,58 @@ def test_cli_noop_on_non_git_exits_zero(tmp_path: Path):
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_iteration_relative_path_resolves_against_project(tmp_path, monkeypatch):
+    """F25: --iteration as a relative path should resolve against --project,
+    not caller's cwd."""
+    import subprocess
+    from scripts.git_iter_commit import main
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(project), "commit", "--allow-empty", "-qm", "init"], check=True)
+
+    iters = project / ".skillgoid" / "iterations"
+    iters.mkdir(parents=True)
+    iter_file = iters / "scaffold-001.json"
+    iter_file.write_text(json.dumps({
+        "iteration": 1, "chunk_id": "scaffold",
+        "gate_report": {"passed": True, "results": []},
+        "exit_reason": "success",
+    }))
+
+    # Create a stub chunks.yaml (v0.7 flow requires it for paths resolution)
+    (project / ".skillgoid" / "chunks.yaml").write_text(
+        "chunks:\n  - id: scaffold\n    description: s\n    gate_ids: [g]\n"
+    )
+
+    # Call main from a cwd that is NOT the project
+    monkeypatch.chdir(tmp_path)
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", ".skillgoid/iterations/scaffold-001.json",
+        "--chunks-file", ".skillgoid/chunks.yaml",
+    ])
+    assert exit_code == 0
+    log = subprocess.run(["git", "-C", str(project), "log", "--oneline"],
+                         capture_output=True, text=True, check=True)
+    assert "iter 1 of chunk scaffold" in log.stdout
+
+
+def test_iteration_unreadable_hard_fails(tmp_path, capsys):
+    """v0.7: replace soft-fail with exit 2 + stderr."""
+    from scripts.git_iter_commit import main
+    project = tmp_path / "proj"
+    project.mkdir()
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", "/nonexistent/path.json",
+        "--chunks-file", "/nonexistent/chunks.yaml",
+    ])
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "cannot read iteration" in captured.err
