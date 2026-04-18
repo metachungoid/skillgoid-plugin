@@ -37,7 +37,7 @@ def _run(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
 def _gate_run_command(gate: dict, project: Path) -> GateResult:
     cmd = gate.get("command") or []
     if not cmd:
-        return GateResult(gate["id"], False, "", "no command specified", "add `command:` to gate")
+        return GateResult(gate["id"], False, "", "", "no command specified; add `command:` to gate")
     expect_exit = gate.get("expect_exit", 0)
     code, out, err = _run(cmd, project)
     passed = code == expect_exit
@@ -53,17 +53,14 @@ GATE_DISPATCH = {
 def run_gates(criteria: dict, project: Path) -> dict[str, Any]:
     results: list[GateResult] = []
     for gate in criteria.get("gates", []):
-        handler = GATE_DISPATCH.get(gate["type"])
+        gate_id = gate.get("id", "<unknown>")
+        gate_type = gate.get("type")
+        if gate_type is None:
+            results.append(GateResult(gate_id, False, "", "", "gate missing `type` field"))
+            continue
+        handler = GATE_DISPATCH.get(gate_type)
         if handler is None:
-            results.append(
-                GateResult(
-                    gate["id"],
-                    False,
-                    "",
-                    f"unsupported gate type: {gate['type']}",
-                    "add adapter support",
-                )
-            )
+            results.append(GateResult(gate_id, False, "", "", f"unsupported gate type: {gate_type} — add adapter support"))
             continue
         results.append(handler(gate, project))
     return {
@@ -80,12 +77,18 @@ def main(argv: list[str] | None = None) -> int:
     src.add_argument("--criteria-stdin", action="store_true", help="Read criteria YAML from stdin")
     args = ap.parse_args(argv)
 
-    if args.criteria_stdin:
-        criteria = yaml.safe_load(sys.stdin.read())
-    else:
-        criteria = yaml.safe_load(args.criteria_file.read_text())
+    try:
+        if args.criteria_stdin:
+            criteria = yaml.safe_load(sys.stdin.read())
+        else:
+            criteria = yaml.safe_load(args.criteria_file.read_text())
+        report = run_gates(criteria or {}, args.project.resolve())
+    except Exception as exc:
+        sys.stderr.write(f"measure_python: {exc}\n")
+        json.dump({"passed": False, "results": [], "error": str(exc)}, sys.stdout)
+        sys.stdout.write("\n")
+        return 2
 
-    report = run_gates(criteria or {}, args.project.resolve())
     json.dump(report, sys.stdout)
     sys.stdout.write("\n")
     return 0 if report["passed"] else 1

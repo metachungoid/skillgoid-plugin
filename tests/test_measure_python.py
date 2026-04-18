@@ -15,7 +15,7 @@ def run_cli(criteria_yaml: str, project_path: Path) -> dict:
         text=True,
         check=False,
     )
-    assert result.returncode in (0, 1), f"stderr: {result.stderr}"
+    assert result.returncode in (0, 1, 2), f"stderr: {result.stderr}"
     return json.loads(result.stdout)
 
 
@@ -44,4 +44,47 @@ gates:
 """
     report = run_cli(criteria, tmp_path)
     assert report["passed"] is False
-    assert report["results"][0]["passed"] is False
+    result = report["results"][0]
+    assert result["passed"] is False
+    assert "exit=1" in result["hint"] or "expected 0" in result["hint"]
+    assert result["stderr"] == ""  # `false` emits nothing
+
+
+def test_missing_command_field(tmp_path: Path):
+    criteria = """
+gates:
+  - id: bad
+    type: run-command
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is False
+    assert "no command specified" in report["results"][0]["hint"]
+    assert report["results"][0]["stderr"] == ""
+
+
+def test_unsupported_gate_type(tmp_path: Path):
+    criteria = """
+gates:
+  - id: mystery
+    type: unknown-gate
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is False
+    assert "unsupported gate type" in report["results"][0]["hint"]
+    assert report["results"][0]["stderr"] == ""
+
+
+def test_malformed_yaml_returns_error_json(tmp_path: Path):
+    # Intentionally broken YAML triggers the exit-2 internal-error path
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "measure_python.py"),
+         "--project", str(tmp_path), "--criteria-stdin"],
+        input=": : :",  # malformed
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    report = json.loads(result.stdout)
+    assert report["passed"] is False
+    assert "error" in report
