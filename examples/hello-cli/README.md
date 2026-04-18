@@ -20,5 +20,6 @@ You should see:
 4. One or more build iterations, each writing `.skillgoid/iterations/NNN.json`.
 5. A `retrospective.md` when gates pass.
 6. A new or updated `~/.claude/skillgoid/vault/python-lessons.md`.
+7. A new line appended to `~/.claude/skillgoid/metrics.jsonl` summarizing the run (timestamp, slug, outcome, chunks, iterations, stalls, budget exhaustion, elapsed time).
 
 If the `Stop` hook fires before completion with a message like "gates still failing", that's correct — it means the hook is wired up.

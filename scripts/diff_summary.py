@@ -56,6 +56,17 @@ def parse_numstat(output: str) -> dict:
     }
 
 
+def _is_git_repo(project: Path) -> bool:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=project, capture_output=True, text=True, check=False,
+        )
+    except FileNotFoundError:
+        return False
+    return result.returncode == 0 and result.stdout.strip() == "true"
+
+
 def _has_parent_commit(project: Path) -> bool:
     result = subprocess.run(
         ["git", "rev-parse", "--verify", "HEAD~1"],
@@ -67,6 +78,8 @@ def _has_parent_commit(project: Path) -> bool:
 def summarize_diff(project: Path, base: str | None = None, head: str = "HEAD") -> dict:
     """Return the parsed diff between base..head in the given project.
     If base is None, defaults to HEAD~1 (or empty tree on first commit)."""
+    if not _is_git_repo(project):
+        return {"files_touched": [], "net_lines": 0, "diff_summary": "git not available"}
     if base is None:
         base = "HEAD~1" if _has_parent_commit(project) else EMPTY_TREE
     try:

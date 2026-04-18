@@ -82,3 +82,14 @@ def test_cli_outputs_json(tmp_path: Path):
     assert "files_touched" in data
     assert "net_lines" in data
     assert "diff_summary" in data
+
+
+def test_summarize_diff_in_non_git_project(tmp_path: Path):
+    """A non-git project should produce the same 'git not available' sentinel
+    as a missing git binary — lets the loop skill uniformly omit the
+    changes field."""
+    # tmp_path is not a git repo
+    result = summarize_diff(tmp_path)
+    assert result["files_touched"] == []
+    assert result["net_lines"] == 0
+    assert result["diff_summary"] == "git not available"
