@@ -201,3 +201,15 @@ def test_criteria_models_rejects_unknown_model():
     }
     errors = list(_validator("criteria.schema.json").iter_errors(data))
     assert any(e.validator == "enum" for e in errors)
+
+
+def test_criteria_gate_env_validates():
+    data = {"gates": [{"id": "g", "type": "pytest", "env": {"PYTHONPATH": "src"}}]}
+    errors = list(_validator("criteria.schema.json").iter_errors(data))
+    assert errors == []
+
+
+def test_criteria_gate_env_values_must_be_strings():
+    data = {"gates": [{"id": "g", "type": "pytest", "env": {"N": 42}}]}
+    errors = list(_validator("criteria.schema.json").iter_errors(data))
+    assert any(e.validator == "type" for e in errors)

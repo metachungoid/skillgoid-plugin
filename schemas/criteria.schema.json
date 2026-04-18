@@ -28,7 +28,12 @@
           "timeout": {"type": "integer", "minimum": 1, "default": 300, "description": "Seconds before the gate is killed and fails. Default 300."},
           "target": {"type": "string", "description": "Package or path to measure coverage for. Default '.'"},
           "min_percent": {"type": "integer", "minimum": 0, "maximum": 100, "default": 80},
-          "compare_to_baseline": {"type": "boolean", "default": false}
+          "compare_to_baseline": {"type": "boolean", "default": false},
+          "env": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            "description": "Environment variables merged into os.environ when running this gate."
+          }
         },
         "additionalProperties": true
       }
@@ -50,7 +55,12 @@
           "timeout": {"type": "integer", "minimum": 1, "default": 300, "description": "Seconds before the gate is killed and fails. Default 300."},
           "target": {"type": "string", "description": "Package or path to measure coverage for. Default '.'"},
           "min_percent": {"type": "integer", "minimum": 0, "maximum": 100, "default": 80},
-          "compare_to_baseline": {"type": "boolean", "default": false}
+          "compare_to_baseline": {"type": "boolean", "default": false},
+          "env": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            "description": "Environment variables merged into os.environ when running this gate."
+          }
         },
         "additionalProperties": true
       }

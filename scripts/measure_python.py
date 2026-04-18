@@ -48,6 +48,23 @@ def _run(cmd: list[str], cwd: Path, timeout: int | None = None) -> tuple[int, st
     return proc.returncode, proc.stdout, proc.stderr
 
 
+def _merge_env(project: Path, gate_env: dict) -> dict:
+    """Merge gate env: overrides onto os.environ. Relative paths in known
+    path-like vars (PYTHONPATH, PATH) are resolved against project dir."""
+    merged = {**os.environ}
+    for k, v in (gate_env or {}).items():
+        if k in ("PYTHONPATH", "PATH"):
+            parts = []
+            for part in str(v).split(os.pathsep):
+                if part and not os.path.isabs(part):
+                    part = str((project / part).resolve())
+                parts.append(part)
+            merged[k] = os.pathsep.join(parts)
+        else:
+            merged[k] = str(v)
+    return merged
+
+
 def _resolve_tool(name: str) -> Path | None:
     """Find a tool binary — first next to the running Python interpreter
     (i.e. in the same venv), then on PATH. Returns None if missing."""
@@ -64,8 +81,13 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
         return GateResult(gate["id"], False, "", "", "no command specified; add `command:` to gate")
     expect_exit = gate.get("expect_exit", 0)
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
-    code, out, err = _run(cmd, project, timeout=timeout)
-    if code == 124:
+    env = _merge_env(project, gate.get("env") or {})
+    try:
+        proc = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True, check=False, timeout=timeout)
+        code, out, err = proc.returncode, proc.stdout, proc.stderr
+    except subprocess.TimeoutExpired as exc:
+        out = (exc.stdout or b"").decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err = (exc.stderr or b"").decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
         return GateResult(gate["id"], False, out, err,
                           f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
     passed = code == expect_exit
@@ -192,8 +214,13 @@ def _gate_cli_command_runs(gate: dict, project: Path) -> GateResult:
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
     if not cmd:
         return GateResult(gate["id"], False, "", "", "no command specified; add `command:` to gate")
-    code, out, err = _run(cmd, project, timeout=timeout)
-    if code == 124:
+    env = _merge_env(project, gate.get("env") or {})
+    try:
+        proc = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True, check=False, timeout=timeout)
+        code, out, err = proc.returncode, proc.stdout, proc.stderr
+    except subprocess.TimeoutExpired as exc:
+        out = (exc.stdout or b"").decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err = (exc.stderr or b"").decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
         return GateResult(gate["id"], False, out, err,
                           f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
     hint_parts: list[str] = []
