@@ -24,6 +24,7 @@ from typing import Any
 import yaml
 
 DEFAULT_GATE_TIMEOUT = 300
+_COVERAGE_RE = re.compile(r"coverage:\s*([0-9.]+)%", re.IGNORECASE)
 
 
 @dataclass
@@ -205,6 +206,26 @@ def _gate_cli_command_runs(gate: dict, project: Path) -> GateResult:
     return GateResult(gate["id"], passed, out, err, "; ".join(hint_parts))
 
 
+def _find_prior_coverage(project: Path, gate_id: str) -> float | None:
+    """Find the most recent prior iteration's coverage gate result.
+    Returns the percent as float, or None if no prior record."""
+    iters_dir = project / ".skillgoid" / "iterations"
+    if not iters_dir.is_dir():
+        return None
+    iter_files = sorted(iters_dir.glob("*.json"), reverse=True)
+    for path in iter_files:
+        try:
+            rec = json.loads(path.read_text())
+        except Exception:
+            continue
+        for r in (rec.get("gate_report", {}).get("results") or []):
+            if r.get("gate_id") == gate_id and r.get("passed"):
+                match = _COVERAGE_RE.search(r.get("stdout") or "")
+                if match:
+                    return float(match.group(1))
+    return None
+
+
 def _gate_coverage(gate: dict, project: Path) -> GateResult:
     target = gate.get("target") or "."
     min_percent = gate.get("min_percent", 80)
@@ -261,6 +282,13 @@ def _gate_coverage(gate: dict, project: Path) -> GateResult:
                 gate["id"], False, stdout_summary, proc.stderr,
                 f"coverage {percent:.1f}% below floor {min_percent}%",
             )
+        if gate.get("compare_to_baseline", False):
+            baseline = _find_prior_coverage(project, gate["id"])
+            if baseline is not None and percent < baseline - 0.5:
+                return GateResult(
+                    gate["id"], False, stdout_summary, proc.stderr,
+                    f"coverage regressed from {baseline:.1f}% to {percent:.1f}%",
+                )
         return GateResult(gate["id"], True, stdout_summary, proc.stderr, "")
     finally:
         try:
