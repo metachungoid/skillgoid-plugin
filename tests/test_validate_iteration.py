@@ -2,8 +2,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from scripts.validate_iteration import validate_iteration
 
 

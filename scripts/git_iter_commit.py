@@ -211,6 +211,27 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"git_iter_commit: cannot read iteration at {iteration_path}: {exc}\n")
         return 2
 
+    # v0.8: schema validation before commit (F5, F9).
+    try:
+        from scripts.validate_iteration import validate_iteration
+    except ImportError:
+        import importlib.util as _ilu
+        _spec = _ilu.spec_from_file_location(
+            "validate_iteration",
+            Path(__file__).resolve().parent / "validate_iteration.py",
+        )
+        _mod = _ilu.module_from_spec(_spec)  # type: ignore[arg-type]
+        _spec.loader.exec_module(_mod)  # type: ignore[union-attr]
+        validate_iteration = _mod.validate_iteration
+    errors = validate_iteration(record)
+    if errors:
+        sys.stderr.write(
+            f"git_iter_commit: iteration at {iteration_path} failed schema validation:\n"
+        )
+        for err in errors:
+            sys.stderr.write(f"  - {err}\n")
+        return 2
+
     # Resolve --chunks-file against --project if relative.
     chunks_file = args.chunks_file
     if chunks_file is not None and not chunks_file.is_absolute():
