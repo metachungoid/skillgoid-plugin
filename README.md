@@ -14,7 +14,7 @@ claude plugin install <git-url-or-local-path>
 
 Or for local development:
 ```bash
-git clone https://github.com/flip/skillgoid.git
+git clone https://github.com/YOUR-HANDLE/skillgoid.git
 cd skillgoid
 claude plugin install .
 ```

@@ -4,7 +4,7 @@
   "description": "Criteria-gated autonomous build loop with per-language compounding memory. Define success, build, measure, reflect, loop until gates pass.",
   "author": {"name": "flip"},
   "license": "MIT",
-  "repository": "https://github.com/flip/skillgoid",
+  "repository": "https://github.com/YOUR-HANDLE/skillgoid",
   "keywords": ["autonomous-builder", "criteria-loop", "skills", "plugin", "memory-vault"],
   "hooks": "./hooks/hooks.json"
 }
