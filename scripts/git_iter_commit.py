@@ -173,8 +173,12 @@ def main(argv: list[str] | None = None) -> int:
     if chunks_file is not None and not chunks_file.is_absolute():
         chunks_file = (project / chunks_file).resolve()
 
-    commit_iteration(project, record, iteration_path=iteration_path, chunks_file=chunks_file)
-    return 0
+    if not is_git_repo(project):
+        # Non-git project: noop is success
+        return 0
+
+    success = commit_iteration(project, record, iteration_path=iteration_path, chunks_file=chunks_file)
+    return 0 if success else 1
 
 
 if __name__ == "__main__":
