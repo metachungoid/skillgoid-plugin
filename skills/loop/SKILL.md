@@ -39,7 +39,9 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
 7. **Measure step.** Invoke the language-adapter skill:
    - `language == "python"` → `skillgoid:python-gates` with `gate_ids=chunk.gate_ids`.
    - Other languages (v1+) → the matching adapter skill.
-8. **Reflect step.** Before writing the iteration file, compute the stall signature by running `python <plugin-root>/scripts/stall_check.py` against the gate_report (write the gate_report to a temp file if needed, then pass the temp file path as the argument). Include the returned 16-char hex value directly in `failure_signature` on initial write — do not leave a placeholder. Then write `.skillgoid/iterations/NNN.json` with:
+8. **Reflect step.** Before writing the iteration file, compute the stall signature by running `python <plugin-root>/scripts/stall_check.py` against the gate_report (write the gate_report to a temp file if needed, then pass the temp file path as the argument). Include the returned 16-char hex value directly in `failure_signature` on initial write — do not leave a placeholder. Then write `.skillgoid/iterations/<chunk_id>-NNN.json` with (v0.7 convention — one filename namespace per chunk, so parallel chunks never contend). `<chunk_id>` is this chunk's id from chunks.yaml; `NNN` is this chunk's own iteration count, zero-padded to 3 digits (first iteration is 001). Example: `scaffold-001.json`, `py_db-001.json`, `py_db-002.json`. Back-compat note: older projects (pre-v0.7) used unprefixed `NNN.json`. Both conventions coexist in the same iterations dir when a project is resumed across the upgrade; readers handle both.
+
+   The iteration record JSON:
    ```json
    {
      "iteration": N,
@@ -57,11 +59,34 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
    ```
    Mark `notable: true` when the reflection surfaces a non-obvious lesson (unexpected tool behavior, surprising library edge case, a design decision that changed the plan). Boring iterations stay `notable: false`. The final written file must have a real 16-char hex in `failure_signature` — the schema will reject a placeholder.
 
+### Scratch files — keep them out of the project tree
+
+Any temp files you create during the iteration — including the one used to pass the gate_report to `stall_check.py` — must live under `tempfile.mkdtemp()` or `$TMPDIR`, never inside the project. If a scratch file lands in the project root, `git_iter_commit.py`'s staging will sweep it into the iteration commit (observed in real runs pre-v0.7).
+
+Canonical pattern:
+
+```python
+import tempfile, json
+from pathlib import Path
+
+with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False,
+                                  dir=tempfile.gettempdir()) as tf:
+    tf.write(json.dumps(gate_report))
+    scratch = Path(tf.name)
+try:
+    # use scratch
+finally:
+    scratch.unlink(missing_ok=True)
+```
+
 8.1. **Git commit step.** Run:
    ```bash
-   python <plugin-root>/scripts/git_iter_commit.py --project <project_path> --iteration .skillgoid/iterations/NNN.json
+   python <plugin-root>/scripts/git_iter_commit.py \
+     --project <project_path> \
+     --iteration .skillgoid/iterations/<chunk_id>-NNN.json \
+     --chunks-file .skillgoid/chunks.yaml
    ```
-   This commits the iteration's changes with a structured message. On non-git projects it silently noops. Skip this step entirely if `criteria.yaml → loop.skip_git == true`.
+   The `--chunks-file` flag (v0.7) lets the commit helper look up the chunk's `paths:` for scoped staging. If you omit `--chunks-file` OR the chunk has no `paths:` declared, git_iter_commit falls back to `git add -A` with a stderr warning — safe for sequential waves, unsafe for parallel ones. This commits the iteration's changes with a structured message. On non-git projects it silently noops. Skip this step entirely if `criteria.yaml → loop.skip_git == true`.
 
 8.2. **Record diff summary.** Immediately after the git commit lands, capture what changed:
    ```bash
