@@ -2,7 +2,7 @@
 
 - **Date:** 2026-04-17
 - **Status:** Draft, pre-implementation
-- **Successor to:** Chungoid (see `../../../chungoid/` and `../../../metachungoid/` reference checkouts)
+- **Successor to:** Chungoid (original repo: https://github.com/chungoid/chungoid; meta-layer: https://github.com/chungoid/metachungoid)
 - **Distribution target:** Public GitHub repo, installable as a Claude Code plugin/skill pack
 
 ---
