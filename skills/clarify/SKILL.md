@@ -48,9 +48,31 @@ Turns a one-line user goal into:
    ```
 5. **Draft `criteria.yaml`** with:
    - `language:` if known
-   - `loop.max_attempts: 5` (default)
+   - `loop:` block with `max_attempts: 5` (default) and optionally `skip_git: false`
    - `gates:` — propose a starting set based on the language and goal. For Python CLIs, default to `pytest`, `ruff`, `cli-command-runs` (help flag), and `import-clean`. For libraries, drop the CLI gate and add `mypy`.
+   - `integration_gates:` (new) — propose ONE default integration gate based on the project type (see step 5.1).
+   - `integration_retries: 2` (default; include only if you've proposed integration_gates).
    - `acceptance:` — 2–5 free-form scenarios derived from clarifying answers.
+
+5.1. **Default integration gate per project type.** Pick one:
+   - **CLI project:** `cli-command-runs` invoking the CLI's main help flag or a trivial subcommand. Example:
+     ```yaml
+     integration_gates:
+       - id: cli_smoke
+         type: cli-command-runs
+         command: ["myapp", "--help"]
+         expect_exit: 0
+         expect_stdout_match: "Usage:"
+     ```
+   - **Library (Python):** `import-clean` of the top-level package. Example:
+     ```yaml
+     integration_gates:
+       - id: import_smoke
+         type: import-clean
+         module: mylib
+     ```
+   - **Service:** if the user can describe a start/health-check/shutdown sequence, generate a `run-command` that does all three. Otherwise leave `integration_gates` empty and note that one should be added by hand.
+   - **Unknown or ambiguous:** leave `integration_gates` empty; the user can add one later.
 6. **Show both files to the user for approval** before returning. Offer to add/remove gates.
 7. **Validate** `criteria.yaml` against `schemas/criteria.schema.json` (run `python -c "import json,yaml,jsonschema; jsonschema.validate(yaml.safe_load(open('.skillgoid/criteria.yaml')), json.load(open('<plugin-root>/schemas/criteria.schema.json')))"`). If validation fails, fix and retry.
 
