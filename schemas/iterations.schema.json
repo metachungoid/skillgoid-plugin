@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Skillgoid .skillgoid/iterations/NNN.json",
+  "type": "object",
+  "required": ["iteration", "chunk_id", "gate_report"],
+  "properties": {
+    "iteration": {"type": "integer", "minimum": 1},
+    "chunk_id": {"type": "string"},
+    "started_at": {"type": "string"},
+    "ended_at": {"type": "string"},
+    "gates_run": {"type": "array", "items": {"type": "string"}},
+    "gate_report": {
+      "type": "object",
+      "required": ["passed", "results"],
+      "properties": {
+        "passed": {"type": "boolean"},
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["gate_id", "passed"],
+            "properties": {
+              "gate_id": {"type": "string"},
+              "passed": {"type": "boolean"},
+              "stdout": {"type": "string"},
+              "stderr": {"type": "string"},
+              "hint": {"type": "string"}
+            },
+            "additionalProperties": true
+          }
+        },
+        "error": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "reflection": {"type": "string"},
+    "notable": {"type": "boolean", "default": false},
+    "failure_signature": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$",
+      "description": "16-char hex signature from scripts/stall_check.py"
+    },
+    "exit_reason": {
+      "type": "string",
+      "enum": ["in_progress", "success", "budget_exhausted", "stalled"]
+    }
+  },
+  "additionalProperties": true
+}

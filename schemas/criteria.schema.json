@@ -8,7 +8,8 @@
     "loop": {
       "type": "object",
       "properties": {
-        "max_attempts": {"type": "integer", "minimum": 1, "default": 5}
+        "max_attempts": {"type": "integer", "minimum": 1, "default": 5},
+        "skip_git": {"type": "boolean", "default": false, "description": "If true, skip git-per-iteration commits"}
       }
     },
     "gates": {
@@ -27,6 +28,30 @@
         },
         "additionalProperties": true
       }
+    },
+    "integration_gates": {
+      "type": "array",
+      "description": "Optional gates run once after ALL chunk gates pass. Same shape as gates[] items. Catches green-gates-broken-product failures.",
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "properties": {
+          "id": {"type": "string"},
+          "type": {"type": "string", "enum": ["pytest", "ruff", "mypy", "import-clean", "cli-command-runs", "run-command"]},
+          "args": {"type": "array", "items": {"type": "string"}},
+          "command": {"type": "array", "items": {"type": "string"}},
+          "expect_exit": {"type": "integer"},
+          "expect_stdout_match": {"type": "string"},
+          "module": {"type": "string"}
+        },
+        "additionalProperties": true
+      }
+    },
+    "integration_retries": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 2,
+      "description": "Number of auto-repair retries if integration_gates fail. After exhaustion, surface to user."
     },
     "acceptance": {
       "type": "array",
