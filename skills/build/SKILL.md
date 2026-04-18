@@ -54,7 +54,7 @@ Routes a user request through the Skillgoid pipeline:
       - Dispatch (via concurrent `Agent()` calls) only the chunks in the wave that pass both checks.
 
    3b. Build the subagent prompt with the curated context slice:
-      - The chunk entry as YAML (id, description, gate_ids, language, depends_on)
+      - The chunk entry as YAML (id, description, gate_ids, language, depends_on, paths). The `paths:` field is consumed by `git_iter_commit.py` at commit time — pass it through verbatim so the subagent includes it in its commit invocation.
       - `retrieve_summary` verbatim
       - `blueprint.md` in full (v0.2 punts on blueprint slicing — passes whole file)
       - Any existing `.skillgoid/iterations/*.json` records for this chunk (if resuming; up to last 2)
