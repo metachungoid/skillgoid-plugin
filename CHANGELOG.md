@@ -2,6 +2,28 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## [0.5.0] — 2026-04-18
+
+### Added
+- `scripts/chunk_topo.py` — topological wave planner for parallel chunk dispatch.
+- `scripts/vault_filter.py` — filter vault lessons by `Status: resolved in vX.Y`.
+
+### Changed
+- `build` skill now dispatches chunks in waves (parallel within each wave). Sequential projects unchanged; projects with independent chunks run concurrently.
+- `feasibility` skill downgrades missing-relative-path-inside-project to a warning.
+- `retrieve` skill filters vault lessons against the current plugin version before surfacing.
+- Vault lesson format gains an optional `Status: resolved in vX.Y` line.
+
+### Backward compatibility
+- v0.4 `criteria.yaml` / `chunks.yaml` / vault files parse unchanged.
+- Sequential chunks behave identically to v0.4 (single-chunk waves).
+- Vault files without `Status:` lines surface as current advice (same as v0.4).
+
+### Notably NOT included
+- Plan refinement mid-build (3 real runs produced 0 evidence it's needed).
+- Rehearsal mode (overlaps with v0.4 feasibility).
+- Polyglot / more language adapters / gate-type plugins / dashboards (no demand signal).
+
 ## [0.4.0] — 2026-04-18
 
 ### Added

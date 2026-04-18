@@ -31,6 +31,18 @@ claude plugin install .
 5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
 6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
 
+## What's new in v0.5
+
+Evidence-driven polish based on three real Skillgoid runs (jyctl, taskq, mdstats):
+
+- **Parallel chunks.** `build` now groups chunks into waves via topological sort of `depends_on`, and dispatches every chunk in a wave concurrently. Sequential projects behave identically to v0.4; projects with independent chunks (like mdstats's parser + counters) run faster.
+- **Vault supersession tracking.** Lessons in `<language>-lessons.md` can now carry a `Status: resolved in vX.Y` line. The `retrieve` skill filters them against the current plugin version so users don't get stale advice for bugs newer Skillgoid already fixed.
+- **Feasibility scaffolding awareness.** `/skillgoid:feasibility` no longer hard-fails when `PYTHONPATH: src` references a path that doesn't exist yet (because the scaffold chunk will create it). Soft warning on fresh projects; hard failure only for absolute paths or paths outside the project.
+
+No plan-refinement-mid-build — 3 real runs produced zero evidence that's needed. Re-evaluate after a run actually demonstrates the need.
+
+All changes fully backward-compatible with v0.4.
+
 ## What's new in v0.4
 
 Observed-ROI reprioritization driven by the first real Skillgoid run (jyctl, 2026-04-17):
