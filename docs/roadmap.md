@@ -7,65 +7,59 @@ The concept: criteria-gated build loop + compounding per-language vault.
 Spec: `docs/superpowers/specs/2026-04-17-skillgoid-design.md`
 Plan: `docs/superpowers/plans/2026-04-17-skillgoid-v0.md`
 
-## In flight
-
-### v0.2 — Production Hardening Bundle
-Three structural upgrades so the criteria-gated loop survives real multi-chunk projects:
-1. Subagent-per-chunk isolation (bounds context, prevents cross-chunk interference)
-2. Deterministic stall detection + git-per-iteration (safer loops, free rollback)
-3. Integration gate after all chunks (catches green-gates-broken-product)
-
+### v0.2 — Production Hardening Bundle (2026-04-17)
+Three structural upgrades so the criteria-gated loop survives multi-chunk projects:
+- Subagent-per-chunk isolation
+- Deterministic stall detection + git-per-iteration
+- Integration gate after all chunks
 Spec: `docs/superpowers/specs/2026-04-17-skillgoid-v0.2-production-hardening.md`
+Plan: `docs/superpowers/plans/2026-04-17-skillgoid-v0.2.md`
 
-## Deferred — v0.3 goals
+### v0.3 — Polish & Observe (2026-04-17)
+Six additive polish items, zero architectural change:
+- Adapter timeouts per gate (default 300s)
+- Coverage gate type (min_percent + compare_to_baseline)
+- Diff-based reflection (`changes` field per iteration)
+- Better `gate-guard` messages (surface top-2 failing gate hints)
+- Model tiering via `criteria.yaml → models`
+- Cross-project metrics jsonl scaffolding
+Spec: `docs/superpowers/specs/2026-04-17-skillgoid-v0.3-polish-observe.md`
+Plan: `docs/superpowers/plans/2026-04-17-skillgoid-v0.3.md`
 
-Items explicitly pushed out of v0.2's YAGNI list and other ideas surfaced during brainstorming. Re-examine these after v0.2 ships and has been exercised on at least one real project.
+## Deferred — v0.4 goals
 
-### Adaptive / judgment upgrades
+After v0.2 and v0.3 have been used on at least one real project, re-rank these by observed ROI.
 
-- **Plan refinement mid-build.** After chunk N passes, if its iterations surfaced evidence that downstream chunks are miscalibrated, let `build` re-invoke `plan` with the new evidence and update `chunks.yaml`. Current v0.2 surfaces to user instead. Unlocks handling projects where the right decomposition only becomes clear during implementation.
+### Adaptive / judgment upgrades (highest expected value)
 
-- **Pre-plan feasibility gate.** After `clarify` completes, a quick adversarial pass ("what's under-specified? what could break this?") before committing to the plan. Catches goals that look fine but are missing a key constraint.
-
-- **Unstick skill.** Dedicated `/skillgoid:unstick` that takes a stalled chunk + one-sentence human hint and re-dispatches the chunk's subagent with the hint injected. Low-friction course-correction that preserves autonomy for everything else.
-
-- **Rehearsal mode.** Before committing to `chunks.yaml`, cheaply simulate each chunk's first iteration (dry-run — no code written) to verify the chunks actually add up to the goal. Catches planning errors before burning iteration budget.
+- **Plan refinement mid-build.** After chunk N passes, if its iterations surfaced evidence that downstream chunks are miscalibrated, `build` re-invokes `plan` with the new evidence. Currently v0.2/v0.3 surface to user.
+- **Pre-plan feasibility gate.** After `clarify`, a quick adversarial pass before committing to the plan.
+- **Unstick skill.** `/skillgoid:unstick <chunk> "<hint>"` re-dispatches a stalled chunk with the hint injected.
+- **Rehearsal mode.** Dry-run each chunk's first iteration before committing chunks.yaml.
 
 ### Scale / throughput upgrades
 
-- **Parallel chunks.** For chunks with no cross-dependency (already tracked via `depends_on`), dispatch their subagents concurrently. Combined with v0.2's integration gate this becomes safe — the gate catches interference at the end.
+- **Parallel chunks** (now safer with v0.2's integration gate catching interference).
+- **Polyglot / multi-language projects** — per-chunk adapter + vault across languages.
 
-- **Polyglot / multi-language projects.** Per-chunk `language:` already exists in the schema. Needs: per-chunk adapter dispatch in `build`, vault retrieval across multiple `<language>-lessons.md` files, per-chunk fixture patterns.
+### Observability readers (v0.3's scaffolding becomes useful)
 
-- **Model tiering.** Haiku for gate measurement subagents (pure tool-use), Sonnet default for build subagents, Opus for `plan` / `clarify` / `retrospect` (judgment-heavy). Cuts cost on large projects.
-
-### Observability upgrades
-
-- **Telemetry / cross-project metrics.** Capture per-project stats: iterations-per-chunk, stall rate, gate-type failure distribution, vault-lesson hit rate. Emit to a user-global `~/.claude/skillgoid/metrics.jsonl`. Power a `/skillgoid:stats` command.
-
-- **Dashboards.** Once metrics exist, a simple read-only report (markdown or plain HTML) showing trends across projects. Low priority — metrics data itself is the real value.
+- `/skillgoid:stats` — reads `~/.claude/skillgoid/metrics.jsonl` and summarizes.
+- Optional markdown/HTML dashboards.
 
 ### Quality / safety upgrades
 
-- **Coverage gate.** When `pytest` passes, also check test coverage hasn't regressed vs. previous iteration. Catches "tests pass because the feature doesn't exist yet" traps.
-
-- **Diff-based reflection.** Iteration reflections capture not just "what failed" but "what changed between this iteration and the last." Makes stall analysis sharper and retrospectives more actionable.
-
-- **Adapter timeouts.** Per-gate `timeout:` field. pytest or ruff can hang on a user's infinite-loop code; v0/v0.2 has no timeout. Default 300s.
-
-- **Better `gate-guard` messaging.** Surface the failing-gate hints (not just IDs) in the block reason so the user immediately understands why Claude was asked to keep going.
-
-- **Tighter vault retrieval.** Instead of reading the whole `<language>-lessons.md`, have `retrieve` extract only the 3–5 sections most relevant to the rough goal. Saves tokens on long-lived vaults.
+- **Tighter vault retrieval.** Instead of reading the whole `<language>-lessons.md`, extract only the 3–5 sections most relevant to `rough_goal`.
 
 ### Ecosystem upgrades
 
-- **More language adapters.** `node-gates`, `go-gates`, `rust-gates`. Community-writable via the template in `docs/custom-adapter-template.md`. Each ships as its own plugin or bundled.
+- **More language adapters** (`node-gates`, `go-gates`, `rust-gates`).
+- **Gate type plugins** — third-party-contributable gate types without editing `measure_python.py`.
 
-- **Gate type plugins.** A gate-type registry so third-party adapters can contribute gate types (e.g., `type: playwright-smoke`) without modifying `measure_python.py`.
+## How to pick up v0.4
 
-## How to pick up v0.3
-
-After v0.2 has been used on at least one real project:
-1. Read that project's `retrospective.md` and vault additions — which v0.3 items would have helped most?
-2. Re-rank by observed ROI, not predicted ROI.
-3. Spec the top 2–3 items using the same brainstorming → spec → plan → subagent-driven-development flow.
+After v0.3 has been used on at least one real project:
+1. Read `~/.claude/skillgoid/metrics.jsonl` — which failure modes actually happened?
+2. Read that project's `retrospective.md` and vault additions — which v0.4 items would have helped most?
+3. Re-rank by observed ROI, not predicted ROI.
+4. Spec the top 2–3 items using the same brainstorming → spec → plan → subagent-driven-development flow.

@@ -31,6 +31,19 @@ claude plugin install .
 5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
 6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
 
+## What's new in v0.3
+
+Six additive polish items, zero architectural change:
+
+- **Adapter timeouts.** Every gate accepts an optional `timeout: <seconds>` (default 300). Runaway tests or hung CLIs fail fast with a clear hint.
+- **Coverage gate.** New gate type `coverage` — honors `min_percent` and optional `compare_to_baseline` regression detection. Catches the "tests pass because the feature doesn't exist yet" trap.
+- **Diff-based reflection.** Each iteration record now includes a `changes` field (files touched, net lines, summary) derived from the per-iteration git diff. Sharpens stall analysis and retrospect.
+- **Better `gate-guard` messages.** When the Stop hook blocks mid-loop, it now surfaces the top-2 failing gate hints so you can decide whether to continue without reading iteration JSON.
+- **Model tiering.** Optional `models:` block in `criteria.yaml` lets you override chunk/integration subagent models per-project (`haiku`/`sonnet`/`opus`).
+- **Cross-project metrics scaffolding.** Retrospect now appends one JSON line per project to `~/.claude/skillgoid/metrics.jsonl`. Data accumulates locally; readers/dashboards come later.
+
+All changes are fully backward-compatible with v0.2.
+
 ## What's new in v0.2
 
 Three structural upgrades that make the build loop credible on real projects:

@@ -2,6 +2,31 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## [0.3.0] — 2026-04-17
+
+### Added
+- `scripts/diff_summary.py` — parses `git diff --numstat` into `{files_touched, net_lines, diff_summary}`.
+- `scripts/metrics_append.py` — appends per-project stats to `~/.claude/skillgoid/metrics.jsonl` (local only, never transmitted).
+- `coverage` gate type in `measure_python.py` — supports `min_percent` (default 80) and `compare_to_baseline` regression detection.
+- Optional `timeout` field on every gate (default 300s). Converts `TimeoutExpired` to a failing GateResult with a clear hint.
+- Optional `models:` block in `criteria.yaml` — override chunk/integration subagent model per-project.
+- `changes` field on every iteration record (from `diff_summary.py`).
+
+### Changed
+- `hooks/gate-guard.sh` block reason now includes top-2 failing gate hints.
+- `loop` skill procedure writes the `changes` field to each iteration record after the git-commit step.
+- `build` skill reads `criteria.yaml → models` for Agent tool dispatch (falls back to v0.2 defaults).
+- `clarify` skill proposes a default `coverage` gate for Python projects with `pytest`.
+- `retrospect` skill appends a line to `~/.claude/skillgoid/metrics.jsonl` after writing the retrospective.
+- `python-gates` skill documentation notes the timeout field is honored.
+
+### Backward compatibility
+- v0.2 `criteria.yaml` / iteration records parse unchanged.
+- Missing `timeout` → default 300s.
+- Missing `models` → v0.2 defaults (sonnet for chunk, haiku for integration).
+- Missing `coverage` gate → no behavior change.
+- Non-git projects skip the `changes` field entirely.
+
 ## [0.2.0] — 2026-04-17
 
 ### Added
