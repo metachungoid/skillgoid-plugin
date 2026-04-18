@@ -122,9 +122,12 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
 def _gate_pytest(gate: dict, project: Path) -> GateResult:
     args = gate.get("args") or []
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
-    env_path = str(project / "src")
-    existing = os.environ.get("PYTHONPATH", "")
-    env = {**os.environ, "PYTHONPATH": env_path + (os.pathsep + existing if existing else "")}
+    gate_env = gate.get("env") or {}
+    env = _merge_env(project, gate_env)
+    if "PYTHONPATH" not in gate_env:
+        env_path = str(project / "src")
+        existing = os.environ.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = env_path + (os.pathsep + existing if existing else "")
     try:
         proc = subprocess.run(
             [sys.executable, "-m", "pytest", *args],
