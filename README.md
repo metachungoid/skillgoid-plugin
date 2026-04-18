@@ -31,6 +31,26 @@ claude plugin install .
 5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
 6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
 
+## What's new in v0.6
+
+Single fix driven by the indexgrep real-run evidence:
+
+- **`SKILLGOID_PYTHON` env export.** The adapter now always exports `SKILLGOID_PYTHON=sys.executable` into every gate subprocess. Shell command strings (e.g., `["bash", "-c", "..."]`) should reference `$SKILLGOID_PYTHON` instead of bare `python` — v0.4's auto-resolution only handles `command[0]`, not substrings inside shell command bodies.
+
+Before (indexgrep integration retry):
+```yaml
+command: ["bash", "-c", "python -m myproj"]   # exit 127 if 'python' not on PATH
+```
+
+After:
+```yaml
+command: ["bash", "-c", "$SKILLGOID_PYTHON -m myproj"]   # always works
+```
+
+Nothing else in v0.6. Plan-refinement-mid-build was formally dropped from the roadmap after producing zero evidence across four real runs (jyctl, taskq, mdstats, indexgrep). Shipping less is the right response to real data.
+
+All changes fully backward-compatible with v0.5.
+
 ## What's new in v0.5
 
 Evidence-driven polish based on three real Skillgoid runs (jyctl, taskq, mdstats):

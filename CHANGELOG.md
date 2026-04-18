@@ -2,6 +2,22 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## [0.6.0] — 2026-04-18
+
+### Added
+- `SKILLGOID_PYTHON` env var (value: `sys.executable`) is now exported to every gate subprocess by `_merge_env`. Shell command strings can reference `$SKILLGOID_PYTHON` to get a guaranteed-working python path — addresses the gap where v0.4's auto-resolution only covers `command[0]`, not substrings in shell bodies.
+
+### Changed
+- `python-gates` skill documents the `SKILLGOID_PYTHON` pattern.
+- `clarify` skill proposes `$SKILLGOID_PYTHON` instead of bare `python` for service-style shell-pipeline integration gates.
+
+### Backward compatibility
+- Fully additive. v0.5 criteria/chunks/iterations parse unchanged.
+- User gate env: can override SKILLGOID_PYTHON for niche cases (testing against a different interpreter).
+
+### Removed from roadmap
+- **Plan refinement mid-build.** Four real Skillgoid runs (jyctl, taskq, mdstats, indexgrep) at 3, 4, 6, and 7 chunks all produced zero evidence the feature is needed. Formally dropped from the roadmap as of v0.6. A v0.7+ re-evaluation would require qualitatively different project shapes (research-grade builds with genuine decomposition uncertainty) first.
+
 ## [0.5.0] — 2026-04-18
 
 ### Added
