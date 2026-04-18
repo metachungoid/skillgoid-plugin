@@ -22,7 +22,7 @@ Produces two files:
 2. **Read** the goal, criteria, and any past-lesson summary still in context from `skillgoid:retrieve`.
 3. **Write `blueprint.md`** covering:
    - Architecture overview (1–3 paragraphs)
-   - Module layout and responsibilities (which files go where)
+   - Module layout and responsibilities — use `## <module-name>` headings for each module/chunk so future blueprint-slicing tools can extract per-chunk sections cleanly. Each heading should match (or obviously relate to) a chunk id in `chunks.yaml`.
    - Public interfaces / function signatures for the main entry points
    - Data model (types, storage, or schema) if applicable
    - External dependencies
@@ -41,6 +41,7 @@ Produces two files:
 - **Small chunks.** A chunk should be 30–90 minutes of work for a focused engineer. If a chunk needs 3+ modules changed, split it.
 - **Gate early, gate often.** Don't reserve all gates for the last chunk. The whole point of the loop is to fail fast.
 - **Dependency-order the list.** `chunks[0]` has no dependencies; each later chunk can reference earlier ones in `depends_on`.
+- **Heading discipline.** Blueprint module headings (`##`) should map 1:1 to chunks in `chunks.yaml`. This keeps each chunk's subagent focused on the right section of the blueprint.
 
 ## Output
 
