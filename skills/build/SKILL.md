@@ -43,11 +43,13 @@ Routes a user request through the Skillgoid pipeline:
       - `blueprint.md` in full (v0.2 punts on blueprint slicing — passes whole file)
       - Any existing `.skillgoid/iterations/*.json` records for this chunk (if resuming; up to last 2)
 
-   3c. Dispatch via the `Agent` tool:
+   3c. Before dispatching, read `models.chunk_subagent` from `criteria.yaml` (default `"sonnet"`) and use it as the `model=` arg. Valid values: `"haiku"`, `"sonnet"`, `"opus"`. If the field is absent or any other value, fall back to `"sonnet"` and log a stderr warning.
+
+      Dispatch via the `Agent` tool:
       ```
       Agent(
         subagent_type="general-purpose",
-        model="sonnet",
+        model=<criteria.models.chunk_subagent or "sonnet">,
         description="Execute Skillgoid chunk <chunk_id>",
         prompt=<curated prompt — see template below>,
       )
@@ -105,11 +107,13 @@ Routes a user request through the Skillgoid pipeline:
 
    4c. Determine `integration_retries` (default 2). Track `attempt = 1`.
 
-   4d. **Dispatch integration subagent** via the Agent tool:
+   4d. Before dispatching, read `models.integration_subagent` from `criteria.yaml` (default `"haiku"`). Integration is pure measurement — haiku is the cost-efficient default but users may override via the `models` block.
+
+      **Dispatch integration subagent** via the Agent tool:
       ```
       Agent(
         subagent_type="general-purpose",
-        model="haiku",
+        model=<criteria.models.integration_subagent or "haiku">,
         description="Run Skillgoid integration gates (attempt <attempt>)",
         prompt=<integration prompt — see template below>,
       )

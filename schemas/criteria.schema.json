@@ -64,6 +64,24 @@
     "acceptance": {
       "type": "array",
       "items": {"type": "string"}
+    },
+    "models": {
+      "type": "object",
+      "properties": {
+        "chunk_subagent": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus"],
+          "default": "sonnet",
+          "description": "Model for per-chunk subagents. v0.2 default is sonnet."
+        },
+        "integration_subagent": {
+          "type": "string",
+          "enum": ["haiku", "sonnet", "opus"],
+          "default": "haiku",
+          "description": "Model for the integration-gate subagent. v0.2 default is haiku (pure measurement)."
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

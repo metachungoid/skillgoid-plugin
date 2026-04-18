@@ -171,3 +171,33 @@ def test_iterations_schema_rejects_non_integer_net_lines():
     }
     errors = list(_validator("iterations.schema.json").iter_errors(record))
     assert any(e.validator == "type" for e in errors)
+
+
+def test_criteria_models_block_validates():
+    data = {
+        "gates": [{"id": "p", "type": "pytest"}],
+        "models": {
+            "chunk_subagent": "opus",
+            "integration_subagent": "haiku",
+        },
+    }
+    errors = list(_validator("criteria.schema.json").iter_errors(data))
+    assert errors == []
+
+
+def test_criteria_models_partial_block_validates():
+    data = {
+        "gates": [{"id": "p", "type": "pytest"}],
+        "models": {"chunk_subagent": "sonnet"},
+    }
+    errors = list(_validator("criteria.schema.json").iter_errors(data))
+    assert errors == []
+
+
+def test_criteria_models_rejects_unknown_model():
+    data = {
+        "gates": [{"id": "p", "type": "pytest"}],
+        "models": {"chunk_subagent": "gpt-7"},
+    }
+    errors = list(_validator("criteria.schema.json").iter_errors(data))
+    assert any(e.validator == "enum" for e in errors)
