@@ -140,3 +140,63 @@ gates:
     assert report["passed"] is False
     stdout_lower = report["results"][0]["stdout"].lower()
     assert "os" in stdout_lower or "unused" in stdout_lower or "f401" in stdout_lower
+
+
+def test_mypy_gate_on_passing_fixture():
+    criteria = """
+gates:
+  - id: types
+    type: mypy
+    args: ["src"]
+"""
+    report = run_cli(criteria, PASSING)
+    assert report["passed"] is True
+
+
+def test_import_clean_passes():
+    criteria = """
+gates:
+  - id: imp
+    type: import-clean
+    module: mypkg
+"""
+    report = run_cli(criteria, PASSING)
+    assert report["passed"] is True
+
+
+def test_import_clean_fails_on_nonexistent_module(tmp_path: Path):
+    criteria = """
+gates:
+  - id: imp
+    type: import-clean
+    module: does_not_exist_xyz
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is False
+
+
+def test_cli_command_runs_passing(tmp_path: Path):
+    criteria = """
+gates:
+  - id: cli
+    type: cli-command-runs
+    command: ["echo", "hello world"]
+    expect_exit: 0
+    expect_stdout_match: "hello"
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is True
+
+
+def test_cli_command_runs_fails_on_stdout_mismatch(tmp_path: Path):
+    criteria = """
+gates:
+  - id: cli
+    type: cli-command-runs
+    command: ["echo", "goodbye"]
+    expect_exit: 0
+    expect_stdout_match: "hello"
+"""
+    report = run_cli(criteria, tmp_path)
+    assert report["passed"] is False
+    assert "stdout" in report["results"][0]["hint"].lower()

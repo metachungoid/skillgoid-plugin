@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -95,10 +96,72 @@ def _gate_ruff(gate: dict, project: Path) -> GateResult:
     return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
 
 
+def _gate_mypy(gate: dict, project: Path) -> GateResult:
+    mypy_bin = _resolve_tool("mypy")
+    if mypy_bin is None:
+        return GateResult(
+            gate["id"], False, "", "",
+            "mypy not found next to python interpreter or on PATH — install with `pip install mypy`",
+        )
+    args = gate.get("args") or ["."]
+    proc = subprocess.run(
+        [str(mypy_bin), *args],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    passed = proc.returncode == 0
+    hint = "" if passed else "mypy reported type errors — read stdout"
+    return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
+
+
+def _gate_import_clean(gate: dict, project: Path) -> GateResult:
+    module = gate.get("module")
+    if not module:
+        return GateResult(gate["id"], False, "", "", "missing `module` field; add `module: <name>`")
+    existing = os.environ.get("PYTHONPATH", "")
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(project / "src") + (os.pathsep + existing if existing else ""),
+    }
+    proc = subprocess.run(
+        [sys.executable, "-c", f"import {module}"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    passed = proc.returncode == 0
+    hint = "" if passed else f"import failed: {proc.stderr.strip()[:200]}"
+    return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
+
+
+def _gate_cli_command_runs(gate: dict, project: Path) -> GateResult:
+    cmd = gate.get("command") or []
+    expect_exit = gate.get("expect_exit", 0)
+    expect_match = gate.get("expect_stdout_match")
+    if not cmd:
+        return GateResult(gate["id"], False, "", "", "no command specified; add `command:` to gate")
+    code, out, err = _run(cmd, project)
+    hint_parts: list[str] = []
+    passed = code == expect_exit
+    if not passed:
+        hint_parts.append(f"exit={code}, expected {expect_exit}")
+    if expect_match and not re.search(expect_match, out):
+        passed = False
+        hint_parts.append(f"stdout did not match /{expect_match}/")
+    return GateResult(gate["id"], passed, out, err, "; ".join(hint_parts))
+
+
 GATE_DISPATCH = {
     "run-command": _gate_run_command,
     "pytest": _gate_pytest,
     "ruff": _gate_ruff,
+    "mypy": _gate_mypy,
+    "import-clean": _gate_import_clean,
+    "cli-command-runs": _gate_cli_command_runs,
 }
 
 
