@@ -65,6 +65,22 @@ def _merge_env(project: Path, gate_env: dict) -> dict:
     return merged
 
 
+def _resolve_python(cmd: list[str], env: dict) -> list[str]:
+    """Replace bare 'python' with sys.executable unless opt-out is set.
+
+    Other command names (python3, absolute paths, any other executable)
+    pass through unchanged. Opt-out: set env SKILLGOID_PYTHON_NO_RESOLVE=1
+    if the user genuinely wants bare 'python' from PATH.
+    """
+    if not cmd:
+        return cmd
+    if env.get("SKILLGOID_PYTHON_NO_RESOLVE") == "1":
+        return cmd
+    if cmd[0] == "python":
+        return [sys.executable, *cmd[1:]]
+    return cmd
+
+
 def _resolve_tool(name: str) -> Path | None:
     """Find a tool binary — first next to the running Python interpreter
     (i.e. in the same venv), then on PATH. Returns None if missing."""
@@ -82,6 +98,7 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
     expect_exit = gate.get("expect_exit", 0)
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
     env = _merge_env(project, gate.get("env") or {})
+    cmd = _resolve_python(cmd, env)
     try:
         proc = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True, check=False, timeout=timeout)
         code, out, err = proc.returncode, proc.stdout, proc.stderr
@@ -215,6 +232,7 @@ def _gate_cli_command_runs(gate: dict, project: Path) -> GateResult:
     if not cmd:
         return GateResult(gate["id"], False, "", "", "no command specified; add `command:` to gate")
     env = _merge_env(project, gate.get("env") or {})
+    cmd = _resolve_python(cmd, env)
     try:
         proc = subprocess.run(cmd, cwd=project, env=env, capture_output=True, text=True, check=False, timeout=timeout)
         code, out, err = proc.returncode, proc.stdout, proc.stderr
