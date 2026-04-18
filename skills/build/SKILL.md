@@ -31,6 +31,7 @@ Routes a user request through the Skillgoid pipeline:
 2. **Main-session prep (in-process, this skill invokes them directly):**
    - Invoke `skillgoid:retrieve` with `rough_goal`. Capture the returned summary — call it `retrieve_summary`.
    - Invoke `skillgoid:clarify`. Reads/writes `.skillgoid/goal.md` + `.skillgoid/criteria.yaml`.
+   - Invoke `skillgoid:feasibility`. Parse the returned JSON report. If `all_ok == false`, surface the markdown summary to the user. Ask: "Proceed anyway / fix criteria / abort?" — pause until user chooses. Only proceed to `plan` on "proceed" or "fix criteria" (after user edits). If feasibility errors or the skill is missing, proceed to plan with a warning.
    - Invoke `skillgoid:plan`. Reads/writes `.skillgoid/blueprint.md` + `.skillgoid/chunks.yaml`.
 
 3. **Per-chunk dispatch loop.** For each chunk in `chunks.yaml` in order:
@@ -97,7 +98,16 @@ Routes a user request through the Skillgoid pipeline:
 
    3e. Gate check:
       - If `exit_reason == "success"`: continue to next chunk.
-      - If `exit_reason` is `"budget_exhausted"` or `"stalled"`: STOP. Do NOT dispatch subsequent chunks. Surface the failure and the summary to the user. The user decides whether to retry (run `/skillgoid:build resume`) or break out (`/skillgoid:build retrospect-only`).
+      - If `exit_reason` is `"budget_exhausted"` or `"stalled"`: STOP. Do NOT dispatch subsequent chunks. Surface the failure and a three-option recovery menu to the user:
+
+        ```
+        Chunk <chunk_id> exited with <exit_reason> after <N> iterations.
+        Latest failure signature: <sig> — <one-line summary>
+        Options:
+          • /skillgoid:build resume                 retry with same budget (useful only if env changed)
+          • /skillgoid:unstick <chunk_id> "<hint>"  re-dispatch with a human one-sentence hint
+          • /skillgoid:build retrospect-only        finalize this project as-is
+        ```
 
 4. **When all chunks have succeeded**, run the integration phase:
 
