@@ -33,6 +33,8 @@ Produces two files:
    - Optional `depends_on` — IDs of chunks that must finish first.
    - Optional `language` override (for polyglot projects).
    - Optional `paths: [<project-relative-paths-or-globs>, ...]`. Declares which project paths this chunk owns. `git_iter_commit.py` uses this to stage only the chunk's own files per iteration — critical for parallel waves where sibling chunks would otherwise cross-contaminate each other's commits via `git add -A`. If two chunks in the same wave would touch overlapping paths, that's a sign they should be sequenced (add `depends_on:`) rather than parallelized.
+   - Optional `gate_overrides: {<gate_id>: {args: [...]}}`. Per-chunk gate argument narrowing (v0.8). Propose this when a chunk owns a test file matching `tests/test_<chunk_id>.py` or a source subdirectory predictable from the chunk's `paths:`. Prevents sibling-in-flight test failures in parallel waves.
+     Example: `gate_overrides: {pytest_chunk: {args: ["tests/test_<chunk_id>.py"]}, lint: {args: ["check", <chunk_paths>...]}}`.
 5. **Enforce sequencing:** gate_ids must be real IDs from `criteria.yaml`. If a chunk references a nonexistent gate, fix it.
 6. **Validate** `chunks.yaml` against `schemas/chunks.schema.json` (same pattern as `clarify` step 7).
 7. **Show both files to the user** and ask for sign-off before returning. Adjust ordering, split/merge chunks if requested.

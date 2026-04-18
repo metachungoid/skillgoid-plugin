@@ -31,6 +31,18 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
 1. **Read** `.skillgoid/chunks.yaml` and `.skillgoid/criteria.yaml`. Find the chunk by ID.
 2. **Resolve language:** chunk `language:` field > criteria `language:` field. If neither, ask the user.
 3. **Resolve gates:** the subset of criteria.gates whose IDs appear in `chunk.gate_ids`.
+3.1. **Apply per-chunk gate_overrides (v0.8).** If the chunk has `gate_overrides:` (optional field in chunks.yaml), merge into the resolved gates before measurement: for each gate in the resolved set, if its `id` appears in `chunk.gate_overrides`, replace the gate's `args` with `chunk.gate_overrides[gate_id].args`. Other gate fields (type, env, timeout, etc.) come from `criteria.yaml` unchanged.
+
+   Example chunk:
+   ```yaml
+   - id: py_db
+     gate_ids: [lint, pytest_chunk]
+     gate_overrides:
+       pytest_chunk: {args: ["tests/test_py_db.py"]}
+       lint: {args: ["check", "src/taskbridge/db.py"]}
+   ```
+
+   This prevents cross-chunk gate interference in parallel waves (F3/F12 from v0.8 findings — every subagent was independently narrowing pytest args defensively; now the narrowing is declared upfront).
 4. **Determine loop budget:** `criteria.loop.max_attempts` (default 5).
 5. **Create** `.skillgoid/iterations/` if absent.
 
