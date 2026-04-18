@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Stop hook: if active Skillgoid session has failing gates and loop budget remains, block the stop.
+# Robust: no string interpolation into Python, graceful PyYAML fallback.
 set -euo pipefail
 
 cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
@@ -14,40 +15,63 @@ if [ ! -d "$iters_dir" ]; then
   exit 0
 fi
 
-latest=$(ls -1 "$iters_dir"/*.json 2>/dev/null | sort | tail -n1 || true)
-if [ -z "$latest" ]; then
-  exit 0
-fi
+python3 - "$sg" "$iters_dir" <<'PY'
+import json
+import sys
+from pathlib import Path
 
-python3 - <<PY "$sg" "$latest"
-import json, sys, yaml
-sg, latest = sys.argv[1], sys.argv[2]
-rec = json.load(open(latest))
-exit_reason = rec.get("exit_reason", "in_progress")
-report = rec.get("gate_report", {})
-passed = report.get("passed", True)
+sg = Path(sys.argv[1])
+iters_dir = Path(sys.argv[2])
 
-if passed or exit_reason in ("success",):
-    sys.exit(0)
-
-# Check budget
-max_attempts = 5
 try:
-    crit = yaml.safe_load(open(f"{sg}/criteria.yaml"))
-    max_attempts = (crit or {}).get("loop", {}).get("max_attempts", 5)
+    iter_files = sorted(iters_dir.glob("*.json"))
+    if not iter_files:
+        sys.exit(0)
+
+    latest = iter_files[-1]
+    try:
+        rec = json.loads(latest.read_text())
+    except Exception:
+        sys.exit(0)  # malformed iteration — don't block
+
+    exit_reason = rec.get("exit_reason", "in_progress")
+    report = rec.get("gate_report", {})
+    passed = report.get("passed", True)
+
+    if passed or exit_reason == "success":
+        sys.exit(0)
+
+    # Determine loop budget — try yaml, fall back to default 5
+    max_attempts = 5
+    criteria_file = sg / "criteria.yaml"
+    if criteria_file.exists():
+        try:
+            import yaml
+            crit = yaml.safe_load(criteria_file.read_text()) or {}
+            max_attempts = int((crit.get("loop") or {}).get("max_attempts", 5))
+        except ImportError:
+            # Fallback: regex for `max_attempts: N`
+            import re
+            text = criteria_file.read_text()
+            m = re.search(r"^\s*max_attempts\s*:\s*(\d+)", text, re.MULTILINE)
+            if m:
+                max_attempts = int(m.group(1))
+        except Exception:
+            pass
+
+    iteration = rec.get("iteration", 0)
+
+    if iteration >= max_attempts or exit_reason in ("budget_exhausted", "stalled"):
+        sys.exit(0)
+
+    failing_ids = [r.get("gate_id") for r in report.get("results", []) if not r.get("passed")]
+    reason = (
+        f"Skillgoid: gates still failing ({', '.join(filter(None, failing_ids)) or 'unknown'}) and "
+        f"loop budget remains ({iteration}/{max_attempts}). Continue iterating with `/skillgoid:build resume`, "
+        f"or break explicitly with `/skillgoid:build retrospect-only`."
+    )
+    print(json.dumps({"decision": "block", "reason": reason}))
 except Exception:
-    pass
-iteration = rec.get("iteration", 0)
-
-if iteration >= max_attempts or exit_reason in ("budget_exhausted", "stalled"):
-    # Budget already exhausted — allow stop.
+    # Any unexpected error: don't block
     sys.exit(0)
-
-failing_ids = [r.get("gate_id") for r in report.get("results", []) if not r.get("passed")]
-reason = (
-    f"Skillgoid: gates still failing ({', '.join(failing_ids) or 'unknown'}) and "
-    f"loop budget remains ({iteration}/{max_attempts}). Continue iterating with /skillgoid:build resume, "
-    f"or break explicitly with /skillgoid:build retrospect-only."
-)
-print(json.dumps({"decision": "block", "reason": reason}))
 PY
