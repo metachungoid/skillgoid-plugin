@@ -38,82 +38,49 @@ Routes a user request through the Skillgoid pipeline:
      If feasibility errors or the skill is missing, proceed to plan with a warning.
    - Invoke `skillgoid:plan`. Reads/writes `.skillgoid/blueprint.md` + `.skillgoid/chunks.yaml`.
 
-3. **Per-chunk dispatch loop.** For each chunk in `chunks.yaml` in order:
+3. **Wave-based dispatch loop.** First, compute execution waves:
 
-   3a. Check dependencies (`chunk.depends_on`). If any listed chunk has not yet exited with `success`, skip this chunk for now (dependency ordering is already enforced by `plan`, so this is a safety check).
+   ```bash
+   python <plugin-root>/scripts/chunk_topo.py --chunks-file .skillgoid/chunks.yaml
+   ```
 
-   3b. Build the subagent prompt with a curated context slice:
-      - The chunk entry as YAML (id, description, gate_ids, language, depends_on)
-      - `retrieve_summary` verbatim
-      - `blueprint.md` in full (v0.2 punts on blueprint slicing — passes whole file)
-      - Any existing `.skillgoid/iterations/*.json` records for this chunk (if resuming; up to last 2)
+   The output is a JSON object `{"waves": [["a"], ["b", "c"], ["d"]]}` where each wave is a set of chunks that can dispatch concurrently (all dependencies satisfied). For purely sequential projects, every wave has one chunk — identical to v0.4 behavior.
 
-   3c. Before dispatching, read `models.chunk_subagent` from `criteria.yaml` (default `"sonnet"`) and use it as the `model=` arg. Valid values: `"haiku"`, `"sonnet"`, `"opus"`. If the field is absent or any other value, fall back to `"sonnet"` and log a stderr warning.
+   For each wave in order:
 
-      Dispatch via the `Agent` tool:
+   3a. For each chunk in the wave (in parallel, via concurrent `Agent()` calls), check dependencies (safety re-check): every listed `chunk.depends_on` must have exited successfully in a prior wave.
+
+   3b. Build the subagent prompt with the curated context slice (same template as v0.4 — chunk spec, retrieve_summary, blueprint, prior iterations if resuming, optional integration_failure_context on re-dispatch).
+
+   3c. Dispatch each chunk's subagent concurrently:
       ```
       Agent(
         subagent_type="general-purpose",
         model=<criteria.models.chunk_subagent or "sonnet">,
         description="Execute Skillgoid chunk <chunk_id>",
-        prompt=<curated prompt — see template below>,
+        prompt=<curated prompt>,
       )
       ```
+      When multiple chunks are in the same wave, these dispatches run in parallel. Claude Code's `Agent` tool supports concurrent subagent invocation — issue all the wave's `Agent()` tool calls in a single message so they execute in parallel.
 
-      **Subagent prompt template:**
-      ```
-      You are executing one chunk of a Skillgoid build loop.
+   3d. **Wait for every subagent in the wave to return** before evaluating results. This guarantees within-wave isolation.
 
-      ## Your task
-      Invoke `skillgoid:loop` for chunk_id="<chunk_id>". When it returns,
-      report the structured summary back to me. Do NOT invoke retrospect —
-      the orchestrator handles that.
+   3e. Parse each subagent's JSON response and accumulate into orchestration state.
 
-      ## Chunk spec (from .skillgoid/chunks.yaml)
-      ```yaml
-      <chunk entry as YAML>
-      ```
-
-      ## Retrieved past lessons
-      <retrieve_summary>
-
-      ## Blueprint
-      <contents of .skillgoid/blueprint.md>
-
-      ## Prior iterations for this chunk (if any)
-      <contents of up to 2 most recent iterations/*.json filtered to chunk_id==this chunk>
-
-      ## Integration failure context (populated on integration auto-repair, empty otherwise)
-      <empty on first dispatch; populated by the orchestrator when re-dispatching
-      this chunk to fix an integration-gate failure — contains which integration
-      gate failed, its hint, and the first 200 chars of stderr>
-
-      ## Return format
-      Return a JSON object on your final message (just JSON, no prose):
-      {
-        "exit_reason": "success" | "budget_exhausted" | "stalled",
-        "iterations_used": <int>,
-        "final_gate_report": { ... verbatim gate_report ... },
-        "notes": "<1–3 sentences, any notable observations for retrospect>"
-      }
-      ```
-
-   3d. Parse the subagent's JSON response. Accumulate summary in an in-memory orchestration state dict (you don't need to persist it — `.skillgoid/iterations/` already has the ground truth).
-
-   3e. Gate check:
-      - If `exit_reason == "success"`: continue to next chunk.
-      - If `exit_reason` is `"budget_exhausted"` or `"stalled"`: STOP. Do NOT dispatch subsequent chunks. Surface the failure and a three-option recovery menu to the user:
+   3f. **Wave gate check**, evaluated after ALL subagents in the wave report:
+      - If every chunk in the wave exited `success`: proceed to the next wave.
+      - If any chunk exited `budget_exhausted` or `stalled`: STOP. Do NOT dispatch subsequent waves. Surface ALL failures (possibly multiple siblings) to the user with the three-option recovery menu:
 
         ```
-        Chunk <chunk_id> exited with <exit_reason> after <N> iterations.
-        Latest failure signature: <sig> — <one-line summary>
+        Chunk(s) <chunk_ids> exited with <exit_reasons> after <N> iterations.
+        Latest failure signatures: <sigs> — <one-line summaries>
         Options:
           • /skillgoid:build resume                 retry with same budget (useful only if env changed)
-          • /skillgoid:unstick <chunk_id> "<hint>"  re-dispatch with a human one-sentence hint
+          • /skillgoid:unstick <chunk_id> "<hint>"  re-dispatch with a human one-sentence hint (capped at 3 invocations per chunk)
           • /skillgoid:build retrospect-only        finalize this project as-is
         ```
 
-        Note: `/skillgoid:unstick` is capped at 3 invocations per chunk. After the third unstick on the same chunk, the unstick skill will refuse and direct the user to `/skillgoid:build retrospect-only`.
+   After all waves complete successfully, proceed to step 4 (integration phase).
 
 4. **When all chunks have succeeded**, run the integration phase:
 
