@@ -27,6 +27,17 @@
             "type": "array",
             "items": {"type": "string"},
             "description": "Optional. Project-relative paths or globs this chunk owns. When present, git_iter_commit.py stages only these paths (plus the iteration file). When absent, falls back to git add -A with a stderr warning."
+          },
+          "gate_overrides": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "properties": {
+                "args": {"type": "array", "items": {"type": "string"}}
+              },
+              "additionalProperties": false
+            },
+            "description": "Optional per-chunk gate argument overrides. Keys are gate ids; values override that gate's args when running this chunk. Other gate fields (type, env, timeout) come from criteria.yaml unchanged."
           }
         }
       }

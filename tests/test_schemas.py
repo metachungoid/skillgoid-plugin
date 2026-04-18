@@ -263,3 +263,52 @@ def test_chunk_paths_must_be_array_of_strings():
     }
     errors = list(_validator("chunks.schema.json").iter_errors(chunks))
     assert any(e.validator == "type" for e in errors)
+
+
+def test_chunk_with_gate_overrides_validates():
+    """v0.8: chunks may declare gate_overrides for per-chunk gate arg narrowing."""
+    chunks = {
+        "chunks": [
+            {
+                "id": "py_db",
+                "description": "x",
+                "gate_ids": ["lint", "pytest_chunk"],
+                "gate_overrides": {
+                    "pytest_chunk": {"args": ["tests/test_py_db.py"]},
+                    "lint": {"args": ["check", "src/taskbridge/db.py"]},
+                },
+            }
+        ]
+    }
+    errors = list(_validator("chunks.schema.json").iter_errors(chunks))
+    assert errors == []
+
+
+def test_chunk_gate_overrides_args_must_be_string_array():
+    chunks = {
+        "chunks": [
+            {
+                "id": "bad",
+                "description": "x",
+                "gate_ids": ["g"],
+                "gate_overrides": {"g": {"args": [123]}},
+            }
+        ]
+    }
+    errors = list(_validator("chunks.schema.json").iter_errors(chunks))
+    assert any(e.validator == "type" for e in errors)
+
+
+def test_chunk_without_gate_overrides_still_validates():
+    """v0.7 back-compat: chunks without gate_overrides still validate."""
+    chunks = {
+        "chunks": [
+            {
+                "id": "legacy",
+                "description": "x",
+                "gate_ids": ["g"],
+            }
+        ]
+    }
+    errors = list(_validator("chunks.schema.json").iter_errors(chunks))
+    assert errors == []
