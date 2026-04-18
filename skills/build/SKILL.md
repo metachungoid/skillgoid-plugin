@@ -76,6 +76,11 @@ Routes a user request through the Skillgoid pipeline:
       ## Prior iterations for this chunk (if any)
       <contents of up to 2 most recent iterations/*.json filtered to chunk_id==this chunk>
 
+      ## Integration failure context (populated on integration auto-repair, empty otherwise)
+      <empty on first dispatch; populated by the orchestrator when re-dispatching
+      this chunk to fix an integration-gate failure — contains which integration
+      gate failed, its hint, and the first 200 chars of stderr>
+
       ## Return format
       Return a JSON object on your final message (just JSON, no prose):
       {
@@ -118,16 +123,15 @@ Routes a user request through the Skillgoid pipeline:
 
       ## Your task
       1. Read `.skillgoid/criteria.yaml` and extract `integration_gates`.
-      2. Invoke `skillgoid:python-gates` (or the appropriate language-gates
-         skill) with the integration_gates list as the gates to run.
-      3. Return the structured JSON report verbatim.
-
-      If `integration_failure_context` is provided below, include it when
-      building the chunk's next-iteration context if you need to retry.
-      For attempt 1, there is no prior context.
-
-      ## Integration failure context (from previous attempt, if any)
-      <empty on attempt 1; set by orchestrator on retries>
+      2. Write a temporary criteria subset to a temp file or stdin, with the
+         integration_gates list AS its `gates:` key:
+              gates:
+                - <each integration_gates entry>
+      3. Invoke `skillgoid:python-gates` (or the appropriate language-gates
+         skill) against that temp criteria. python-gates always reads `gates[]`
+         — it does not distinguish integration vs. per-chunk; the semantic
+         difference lives in the orchestrator.
+      4. Return the structured JSON report verbatim.
 
       ## Return format
       Return a JSON object on your final message:
@@ -140,7 +144,7 @@ Routes a user request through the Skillgoid pipeline:
    4e. Write `.skillgoid/integration/<attempt>.json` with the returned report:
       ```json
       {
-        "attempt": <attempt>,
+        "iteration": <attempt>,
         "chunk_id": "__integration__",
         "gate_report": { ... returned verbatim ... },
         "started_at": "ISO-8601",
