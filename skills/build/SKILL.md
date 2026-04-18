@@ -31,7 +31,11 @@ Routes a user request through the Skillgoid pipeline:
 2. **Main-session prep (in-process, this skill invokes them directly):**
    - Invoke `skillgoid:retrieve` with `rough_goal`. Capture the returned summary — call it `retrieve_summary`.
    - Invoke `skillgoid:clarify`. Reads/writes `.skillgoid/goal.md` + `.skillgoid/criteria.yaml`.
-   - Invoke `skillgoid:feasibility`. Parse the returned JSON report. If `all_ok == false`, surface the markdown summary to the user. Ask: "Proceed anyway / fix criteria / abort?" — pause until user chooses. Only proceed to `plan` on "proceed" or "fix criteria" (after user edits). If feasibility errors or the skill is missing, proceed to plan with a warning.
+   - Invoke `skillgoid:feasibility`. Parse the returned JSON report. If `all_ok == false`, surface the markdown summary to the user. Ask: "Proceed anyway / fix criteria / abort?" — pause until user chooses.
+     - On **"proceed anyway"** → continue to `plan`.
+     - On **"fix criteria"** → let the user edit `.skillgoid/criteria.yaml`, then **re-invoke `skillgoid:feasibility`**. Loop this branch until `all_ok == true` OR the user elects "proceed anyway" OR "abort".
+     - On **"abort"** → stop; do not invoke `plan`.
+     If feasibility errors or the skill is missing, proceed to plan with a warning.
    - Invoke `skillgoid:plan`. Reads/writes `.skillgoid/blueprint.md` + `.skillgoid/chunks.yaml`.
 
 3. **Per-chunk dispatch loop.** For each chunk in `chunks.yaml` in order:
@@ -108,6 +112,8 @@ Routes a user request through the Skillgoid pipeline:
           • /skillgoid:unstick <chunk_id> "<hint>"  re-dispatch with a human one-sentence hint
           • /skillgoid:build retrospect-only        finalize this project as-is
         ```
+
+        Note: `/skillgoid:unstick` is capped at 3 invocations per chunk. After the third unstick on the same chunk, the unstick skill will refuse and direct the user to `/skillgoid:build retrospect-only`.
 
 4. **When all chunks have succeeded**, run the integration phase:
 
