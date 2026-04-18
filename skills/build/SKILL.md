@@ -92,7 +92,77 @@ Routes a user request through the Skillgoid pipeline:
       - If `exit_reason == "success"`: continue to next chunk.
       - If `exit_reason` is `"budget_exhausted"` or `"stalled"`: STOP. Do NOT dispatch subsequent chunks. Surface the failure and the summary to the user. The user decides whether to retry (run `/skillgoid:build resume`) or break out (`/skillgoid:build retrospect-only`).
 
-4. **When all chunks have succeeded**, proceed to the integration gate phase (added separately in v0.2 Task 8 — for now, if `integration_gates` is empty or not implemented, proceed directly to step 6 retrospect).
+4. **When all chunks have succeeded**, run the integration phase:
+
+   4a. Read `.skillgoid/criteria.yaml`. If `integration_gates` is absent or empty, skip to step 9 (retrospect).
+
+   4b. Create `.skillgoid/integration/` if absent.
+
+   4c. Determine `integration_retries` (default 2). Track `attempt = 1`.
+
+   4d. **Dispatch integration subagent** via the Agent tool:
+      ```
+      Agent(
+        subagent_type="general-purpose",
+        model="haiku",
+        description="Run Skillgoid integration gates (attempt <attempt>)",
+        prompt=<integration prompt — see template below>,
+      )
+      ```
+
+      **Integration subagent prompt template:**
+      ```
+      You are running Skillgoid's integration gates — the end-to-end checks
+      that verify the project works as a whole after all chunks have passed
+      their individual gates.
+
+      ## Your task
+      1. Read `.skillgoid/criteria.yaml` and extract `integration_gates`.
+      2. Invoke `skillgoid:python-gates` (or the appropriate language-gates
+         skill) with the integration_gates list as the gates to run.
+      3. Return the structured JSON report verbatim.
+
+      If `integration_failure_context` is provided below, include it when
+      building the chunk's next-iteration context if you need to retry.
+      For attempt 1, there is no prior context.
+
+      ## Integration failure context (from previous attempt, if any)
+      <empty on attempt 1; set by orchestrator on retries>
+
+      ## Return format
+      Return a JSON object on your final message:
+      {
+        "passed": bool,
+        "results": [ ... same shape as any gate_report.results ... ]
+      }
+      ```
+
+   4e. Write `.skillgoid/integration/<attempt>.json` with the returned report:
+      ```json
+      {
+        "attempt": <attempt>,
+        "chunk_id": "__integration__",
+        "gate_report": { ... returned verbatim ... },
+        "started_at": "ISO-8601",
+        "ended_at": "ISO-8601"
+      }
+      ```
+
+   4f. **If `gate_report.passed == true`**: integration succeeded. Proceed to step 9 (retrospect).
+
+   4g. **If `gate_report.passed == false` and `attempt < integration_retries + 1`**: auto-repair path.
+
+      - **Identify suspect chunk(s).** For each failing gate, grep its `stderr` and `stdout` for filenames that appear in the chunks' blueprint/impl paths. Pick the chunk whose file is most recently mentioned. If no filename match, ask the user which chunk to retry.
+      - **Re-dispatch the suspect chunk's loop subagent** (exactly as in step 3c) with extra injected context: a new field `integration_failure_context` in the chunk prompt describing the integration-gate failure (which gate failed, hint, stderr prefix). The loop subagent should interpret this as "your chunk's per-chunk gates pass, but the full system fails at X — fix your chunk to address X."
+      - After the chunk subagent returns (with a fresh `success` / `stalled` / `budget_exhausted`), increment `attempt` and return to step 4d to re-run the integration subagent.
+
+   4h. **If `gate_report.passed == false` and attempts exhausted**: Surface to the user. Do NOT auto-invoke retrospect. Print:
+      ```
+      Integration failed after <N> attempts. See .skillgoid/integration/*.json
+      for reports. Run /skillgoid:build retrospect-only to finalize this
+      project as-is, or debug manually and re-run.
+      ```
+      Stop.
 
 ### Dispatch — Resume (`subcommand == "resume"` or default when `.skillgoid/` exists)
 
@@ -110,9 +180,7 @@ Routes a user request through the Skillgoid pipeline:
 
 ### Retrospect phase
 
-9. (Integration phase runs here in v0.2 — added in a later commit.)
-
-10. Invoke `skillgoid:retrospect` once integration (if any) passes or is skipped.
+9. Invoke `skillgoid:retrospect` once integration (if any) passes or is skipped.
 
 ## Output
 
