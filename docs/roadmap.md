@@ -58,9 +58,23 @@ Two items driven by the `taskbridge` polyglot stress run:
 Spec: `docs/superpowers/specs/2026-04-18-skillgoid-v0.7-correctness-bundle.md`
 Plan: `docs/superpowers/plans/2026-04-18-skillgoid-v0.7.md`
 
+### v0.8 — Correctness + Subagent Discipline Bundle (2026-04-18)
+Five items covering 7 findings from the minischeme 18-chunk stress run:
+- Iteration JSON schema validation before commit (F5, F9)
+- `chunk_topo` auto-serializes same-file chunks in parallel waves (F8)
+- `chunks.yaml` gains optional `gate_overrides:` for per-chunk gate arg narrowing (F3, F12)
+- Blueprint slicing via `scripts/blueprint_slice.py` — finally, after being deferred since v0.2 (F7)
+- `## Cross-chunk types` blueprint convention (F6)
+Spec: `docs/superpowers/specs/2026-04-18-skillgoid-v0.8-correctness-and-discipline.md`
+Plan: `docs/superpowers/plans/2026-04-18-skillgoid-v0.8.md`
+
+## Formally closed (sufficient evidence)
+
+- **Plan refinement mid-build.** Zero evidence across 8 real runs: jyctl, taskq, mdstats, indexgrep, findings, taskbridge (polyglot), minischeme (18-chunk stress), plus the v0.6 ship-less decision point. The minischeme run was the canonical case where plan refinement "should" have been needed — compiler-style project with mid-build IR-shape discovery — and it wasn't. Not reopening without qualitatively new evidence.
+
 ## Dropped from roadmap (v0.6 decision)
 
-- **Plan refinement mid-build.** Four real runs, zero evidence. Formally dropped. Re-evaluation would require qualitatively different project shapes (research-grade builds with genuine decomposition uncertainty) AND two+ subsequent runs still producing evidence for the need.
+- **Plan refinement mid-build.** Four real runs, zero evidence. Formally dropped. Re-evaluation would require qualitatively different project shapes (research-grade builds with genuine decomposition uncertainty) AND two+ subsequent runs still producing evidence for the need. (Superseded by the "Formally closed" entry above as of v0.8.)
 
 ## Deferred — await qualitatively different project shapes
 
@@ -74,7 +88,17 @@ Items kept deferred because no real run has exercised them. Don't revive without
 - **Dashboards / HTML rendering.** `/skillgoid:stats` markdown sufficient.
 - **Tighter vault retrieval.** 5 entries after 4 projects; no scale pressure.
 
-## How to pick up v0.8
+## How to pick up v0.9
+
+Currently deferred v0.8+ items:
+- **Polyglot language support** (`languages[]` migration, polyglot clarify defaults, node-gates adapter, multi-language vault/metrics). Waits on 2-3 ORGANIC polyglot runs. `taskbridge` was synthetic; doesn't count. If and when real polyglot-user projects surface, design v0.9 around their shape.
+- **F10 (out-of-pipeline commits by subagents fixing adjacent chunks' tests):** one observation in minischeme. Needs 2+ more to justify machinery. Document the pattern but don't formalize yet.
+- **F11 (double-commit symptom):** v0.8 schema validation should incidentally address it. If it recurs post-v0.8, investigate separately.
+- **Glob-aware paths overlap detection:** v0.8 uses exact-string match. If a user project shows overlapping globs the exact matcher misses, add glob-aware matching in v0.9.
+- **Per-chunk blueprint files (alternative to in-memory slicing):** v0.8 went with in-memory. If users want on-disk per-chunk blueprints for audit, revisit.
+- **Rehearsal mode, gate-type plugins, dashboards:** unchanged from v0.7's deferred list — no new evidence.
+
+Historical v0.8 intake guidance (now shipped — the minischeme run produced the v0.8 evidence):
 
 Additional for v0.8 (driven by taskbridge findings deferred from v0.7):
 - Polyglot language-support shape (`languages[]` migration, polyglot clarify defaults, node-gates adapter) waits on 2-3 more polyglot project runs before committing to a design. One polyglot run exposed the correctness issues v0.7 ships; it is not enough evidence to commit to a full polyglot architecture.

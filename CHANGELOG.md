@@ -2,6 +2,32 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## [0.8.0] — 2026-04-18
+
+### Changed
+- `scripts/git_iter_commit.py` now validates iteration JSON against `schemas/iterations.schema.json` before acquiring the commit lock. Records missing required fields (e.g., `gate_report`) or with wrong types (e.g., `iteration: "001"` as string) are refused with exit 2 and a clear error pointing at the bad field.
+- `scripts/chunk_topo.py` `plan_waves()` now auto-serializes chunks in the same wave whose `paths:` overlap. When overlap is detected, the wave is split into consecutive sub-waves (alphabetical by `chunk_id` for determinism). Prevents the same-file-same-wave commit cross-contamination observed in the minischeme stress run where `tail-calls` and `error-handling` both modified `evaluator.py`.
+- `skills/build/SKILL.md` subagent prompt construction now invokes `scripts/blueprint_slice.py` and passes only the chunk's section + `## Architecture overview` + `## Cross-chunk types` (when present) to each subagent. Replaces v0.2's "passes whole file" punt.
+- `skills/loop/SKILL.md` step 3.1 applies `chunk.gate_overrides` when filtering the criteria subset for measurement.
+- `skills/plan/SKILL.md` instructs blueprint authors to include a `## Cross-chunk types` section, propose `gate_overrides` per chunk, and avoid same-file chunks in the same wave.
+
+### Added
+- `scripts/validate_iteration.py` — iteration JSON schema validator (importable + CLI).
+- `scripts/blueprint_slice.py` — chunk-aware blueprint slicer (importable + CLI).
+- `chunks.yaml` schema gains optional `gate_overrides:` field per chunk.
+- New `tests/test_validate_iteration.py`, `tests/test_blueprint_slice.py`, `tests/test_gate_overrides.py`, `tests/test_v08_bundle.py`. Plus +5 tests to `test_chunk_topo.py`, +3 to `test_schemas.py`, +2 to `test_git_iter_commit.py`. Total new tests: ~35.
+
+### Formally closed (sufficient evidence)
+- **Plan refinement mid-build.** Zero evidence across 8 real runs (including the 18-chunk minischeme stress run — canonical case for mid-build IR-shape discovery, did not trigger the need). Roadmap updated to move this from "Deferred" to "Formally closed."
+
+### Backward compatibility
+- Existing `criteria.yaml`: unchanged behavior.
+- Existing `chunks.yaml` without `gate_overrides`: unchanged.
+- Existing `chunks.yaml` without `paths:` or with non-overlapping paths: `chunk_topo` behaves identically to v0.7.
+- Existing `blueprint.md` without `## Cross-chunk types`: slicer warns but proceeds.
+- Existing `blueprint.md` without `## <chunk_id>` H2 headings (legacy pre-v0.2 projects): slicer falls back to full-blueprint return with warning.
+- Existing iteration JSONs that were always schema-valid: continue to pass. Records that were silently-schema-non-conforming (rare; observed once in minischeme stress run's `error-handling-001.json`) will now fail on resume — the migration path is to fix the bad record and re-run.
+
 ## [0.7.0] — 2026-04-18
 
 ### Changed

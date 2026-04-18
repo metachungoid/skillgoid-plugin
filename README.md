@@ -31,6 +31,18 @@ claude plugin install .
 5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
 6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
 
+## What's new in v0.8
+
+Correctness + subagent discipline bundle driven by the `minischeme` 18-chunk stress run:
+
+- **Iteration JSON validated before commit.** `git_iter_commit` now refuses to commit when the iteration record fails `schemas/iterations.schema.json`. Catches the silent-corruption cases where a subagent writes `status`/`gates` instead of `exit_reason`/`gate_report`, or zero-pads the integer `iteration` field. Commit-message-lies-about-status goes away.
+- **`chunk_topo` auto-serializes same-file chunks.** Two chunks in the same wave whose `paths:` overlap used to risk one's changes getting committed under the other's chunk message. `plan_waves` now splits overlapping pairs into consecutive sub-waves automatically.
+- **Per-chunk `gate_overrides:` in `chunks.yaml`.** Declare per-chunk gate argument narrowing upfront (e.g., `pytest_chunk.args = ["tests/test_<chunk>.py"]`) instead of having every parallel-wave subagent reinvent the defensive pattern. Loop skill applies them when building the criteria subset.
+- **Blueprint slicing, finally.** v0.2 punted on this. v0.8 delivers: subagents now receive only their chunk's section + the architecture overview + the new `## Cross-chunk types` section, not the whole blueprint. Kills the "Wave 4 implements Wave 5's code" ahead-of-scope pattern.
+- **`## Cross-chunk types` blueprint convention.** Authoritative section declaring types that multiple chunks consume and the canonical module each lives in. Prevents duplicate-singleton planting (parser-side `Nil` and values-side `Nil` turning out to be different objects).
+
+Fully backward-compatible with v0.7. Also: plan-refinement-mid-build is formally closed after 8 runs of zero evidence.
+
 ## What's new in v0.7
 
 Correctness bundle driven by the `taskbridge` polyglot stress run:

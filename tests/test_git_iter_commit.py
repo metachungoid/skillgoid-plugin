@@ -304,3 +304,65 @@ def test_missing_chunks_file_arg_falls_back_to_add_all(tmp_path, capsys):
         capture_output=True, text=True, check=True,
     ).stdout.strip().split("\n")
     assert "a.py" in files
+
+
+def test_invalid_iteration_hard_fails(tmp_path, capsys):
+    """F9: malformed iteration JSON (missing gate_report) must fail commit."""
+    import subprocess
+    from scripts.git_iter_commit import main
+    project = tmp_path / "proj"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(project), "commit", "--allow-empty", "-qm", "init"], check=True)
+    iters = project / ".skillgoid" / "iterations"
+    iters.mkdir(parents=True)
+    bad_iter = iters / "x-001.json"
+    bad_iter.write_text(json.dumps({"iteration": 1, "chunk_id": "x"}))  # missing gate_report
+    (project / ".skillgoid" / "chunks.yaml").write_text(
+        "chunks:\n  - id: x\n    description: x\n    gate_ids: [g]\n"
+    )
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", str(bad_iter),
+        "--chunks-file", str(project / ".skillgoid" / "chunks.yaml"),
+    ])
+    assert exit_code == 2
+    captured = capsys.readouterr()
+    assert "failed validation" in captured.err or "gate_report" in captured.err
+    # Commit should NOT have happened
+    log = subprocess.run(
+        ["git", "-C", str(project), "log", "--oneline"],
+        capture_output=True, text=True, check=True,
+    )
+    assert "iter 1 of chunk x" not in log.stdout
+
+
+def test_valid_iteration_commits_normally(tmp_path):
+    """Regression: valid iteration still commits as in v0.7."""
+    import subprocess
+    from scripts.git_iter_commit import main
+    project = tmp_path / "proj"
+    project.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=project, check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(project), "config", "user.name", "t"], check=True)
+    subprocess.run(["git", "-C", str(project), "commit", "--allow-empty", "-qm", "init"], check=True)
+    iters = project / ".skillgoid" / "iterations"
+    iters.mkdir(parents=True)
+    good_iter = iters / "x-001.json"
+    good_iter.write_text(json.dumps({
+        "iteration": 1, "chunk_id": "x",
+        "gate_report": {"passed": True, "results": []},
+        "exit_reason": "success",
+    }))
+    (project / ".skillgoid" / "chunks.yaml").write_text(
+        "chunks:\n  - id: x\n    description: x\n    gate_ids: [g]\n"
+    )
+    exit_code = main([
+        "--project", str(project),
+        "--iteration", str(good_iter),
+        "--chunks-file", str(project / ".skillgoid" / "chunks.yaml"),
+    ])
+    assert exit_code == 0

@@ -88,3 +88,68 @@ def test_chunks_preserves_yaml_order_within_wave():
     ]
     waves = plan_waves(chunks)
     assert waves[1] == ["aa", "zz"]  # sorted
+
+
+def test_overlapping_paths_auto_serialize():
+    """F8: chunks with overlapping paths in the same wave get split."""
+    chunks = [
+        {"id": "scaffold"},
+        {"id": "a", "depends_on": ["scaffold"], "paths": ["src/shared.py"]},
+        {"id": "b", "depends_on": ["scaffold"], "paths": ["src/shared.py", "src/b.py"]},
+    ]
+    waves = plan_waves(chunks)
+    # a and b overlap on shared.py; must NOT be in same wave
+    assert waves[0] == ["scaffold"]
+    # Assert they're NOT both in the same wave
+    assert not any("a" in w and "b" in w for w in waves)
+
+
+def test_disjoint_paths_stay_parallel():
+    """Regression: non-overlapping paths remain parallel (v0.5 behavior)."""
+    chunks = [
+        {"id": "scaffold"},
+        {"id": "a", "depends_on": ["scaffold"], "paths": ["src/a.py"]},
+        {"id": "b", "depends_on": ["scaffold"], "paths": ["src/b.py"]},
+    ]
+    waves = plan_waves(chunks)
+    assert waves[0] == ["scaffold"]
+    assert set(waves[1]) == {"a", "b"}
+    assert len(waves) == 2
+
+
+def test_three_way_overlap_produces_three_sub_waves():
+    """All three chunks pairwise-overlap → three serial sub-waves."""
+    chunks = [
+        {"id": "scaffold"},
+        {"id": "a", "depends_on": ["scaffold"], "paths": ["src/core.py"]},
+        {"id": "b", "depends_on": ["scaffold"], "paths": ["src/core.py"]},
+        {"id": "c", "depends_on": ["scaffold"], "paths": ["src/core.py"]},
+    ]
+    waves = plan_waves(chunks)
+    assert waves[0] == ["scaffold"]
+    assert waves[1:] == [["a"], ["b"], ["c"]]  # alphabetical order for determinism
+
+
+def test_overlap_serialization_is_deterministic():
+    """Alphabetical grouping produces identical waves across runs."""
+    chunks = [
+        {"id": "scaffold"},
+        {"id": "z", "depends_on": ["scaffold"], "paths": ["src/shared.py"]},
+        {"id": "a", "depends_on": ["scaffold"], "paths": ["src/shared.py"]},
+        {"id": "m", "depends_on": ["scaffold"], "paths": ["src/shared.py"]},
+    ]
+    waves = plan_waves(chunks)
+    assert waves[0] == ["scaffold"]
+    assert waves[1:] == [["a"], ["m"], ["z"]]
+
+
+def test_chunks_without_paths_dont_split():
+    """Chunks that don't declare paths: remain parallel (v0.5 back-compat)."""
+    chunks = [
+        {"id": "scaffold"},
+        {"id": "a", "depends_on": ["scaffold"]},  # no paths
+        {"id": "b", "depends_on": ["scaffold"]},  # no paths
+    ]
+    waves = plan_waves(chunks)
+    assert waves[0] == ["scaffold"]
+    assert set(waves[1]) == {"a", "b"}
