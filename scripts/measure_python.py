@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass, asdict
@@ -35,6 +36,16 @@ def _run(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
     return proc.returncode, proc.stdout, proc.stderr
 
 
+def _resolve_tool(name: str) -> Path | None:
+    """Find a tool binary — first next to the running Python interpreter
+    (i.e. in the same venv), then on PATH. Returns None if missing."""
+    venv_candidate = Path(sys.executable).parent / name
+    if venv_candidate.exists():
+        return venv_candidate
+    found = shutil.which(name)
+    return Path(found) if found else None
+
+
 def _gate_run_command(gate: dict, project: Path) -> GateResult:
     cmd = gate.get("command") or []
     if not cmd:
@@ -49,7 +60,8 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
 def _gate_pytest(gate: dict, project: Path) -> GateResult:
     args = gate.get("args") or []
     env_path = str(project / "src")
-    env = {**os.environ, "PYTHONPATH": env_path + ":" + os.environ.get("PYTHONPATH", "")}
+    existing = os.environ.get("PYTHONPATH", "")
+    env = {**os.environ, "PYTHONPATH": env_path + (os.pathsep + existing if existing else "")}
     proc = subprocess.run(
         [sys.executable, "-m", "pytest", *args],
         cwd=project,
@@ -64,10 +76,15 @@ def _gate_pytest(gate: dict, project: Path) -> GateResult:
 
 
 def _gate_ruff(gate: dict, project: Path) -> GateResult:
-    args = gate.get("args") or ["check", "--isolated", "."]
-    ruff_bin = str(Path(sys.executable).parent / "ruff")
+    ruff_bin = _resolve_tool("ruff")
+    if ruff_bin is None:
+        return GateResult(
+            gate["id"], False, "", "",
+            "ruff not found next to the python interpreter or on PATH — install with `pip install ruff`",
+        )
+    args = gate.get("args") or ["check", "."]
     proc = subprocess.run(
-        [ruff_bin, *args],
+        [str(ruff_bin), *args],
         cwd=project,
         capture_output=True,
         text=True,

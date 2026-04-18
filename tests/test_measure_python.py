@@ -123,6 +123,7 @@ def test_ruff_gate_passing():
 gates:
   - id: lint
     type: ruff
+    args: ["check", "--isolated", "."]
 """
     report = run_cli(criteria, PASSING)
     assert report["passed"] is True
@@ -133,9 +134,9 @@ def test_ruff_gate_failing():
 gates:
   - id: lint
     type: ruff
+    args: ["check", "--isolated", "."]
 """
     report = run_cli(criteria, FAILING)
     assert report["passed"] is False
-    # ruff should flag the unused os import
     stdout_lower = report["results"][0]["stdout"].lower()
     assert "os" in stdout_lower or "unused" in stdout_lower or "f401" in stdout_lower
