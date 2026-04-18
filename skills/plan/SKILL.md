@@ -22,7 +22,22 @@ Produces two files:
 2. **Read** the goal, criteria, and any past-lesson summary still in context from `skillgoid:retrieve`.
 3. **Write `blueprint.md`** covering:
    - Architecture overview (1–3 paragraphs)
-   - Module layout and responsibilities — use `## <module-name>` headings for each module/chunk so future blueprint-slicing tools can extract per-chunk sections cleanly. Each heading should match (or obviously relate to) a chunk id in `chunks.yaml`.
+   - **Cross-chunk types section** (v0.8, REQUIRED for multi-chunk type contracts). Immediately after the architecture overview, add a `## Cross-chunk types` section enumerating types that multiple chunks consume, with the canonical module each lives in. Example:
+
+     ```markdown
+     ## Cross-chunk types
+
+     Types that multiple chunks consume. All chunks MUST import these from the listed module rather than re-define them locally.
+
+     - `Nil` (sentinel) — defined in `src/mypkg/values.py`.
+     - `SExpr` (ADT: Atom, Symbol, Pair, Nil) — defined in `src/mypkg/parser.py`.
+     - `Environment` — defined in `src/mypkg/environment.py`.
+
+     Do not re-define these types in any other module.
+     ```
+
+     Omitting this section is not a hard error but surfaces as a slicer warning at build time (F6 from v0.8 findings: parser subagent invented its own Nil singleton because the blueprint didn't declare the shared one). The blueprint slicer always includes this section in every subagent's prompt when present.
+   - Module layout and responsibilities — use `## <module-name>` headings for each module/chunk so the blueprint slicer (v0.8) can extract per-chunk sections cleanly. Each heading should match (or obviously relate to) a chunk id in `chunks.yaml`. Build-time dispatch passes only the chunk's section + architecture overview + cross-chunk types to each subagent — NOT the whole blueprint.
    - Public interfaces / function signatures for the main entry points
    - Data model (types, storage, or schema) if applicable
    - External dependencies
@@ -46,6 +61,7 @@ Produces two files:
 - **Dependency-order the list.** `chunks[0]` has no dependencies; each later chunk can reference earlier ones in `depends_on`.
 - **Heading discipline.** Blueprint module headings (`##`) should map 1:1 to chunks in `chunks.yaml`. This keeps each chunk's subagent focused on the right section of the blueprint.
 - **Declare `paths:` for every chunk.** It costs one line per chunk in `chunks.yaml` and prevents the parallel-wave commit-scope failure mode. A chunk that genuinely touches the whole repo (rare — usually only a `scaffold` chunk) can omit `paths:` and accept `git add -A` fallback; for anything smaller, declare the paths.
+- **Avoid same-file chunks in the same wave.** Two chunks that modify overlapping `paths:` cannot safely commit in parallel — one's changes get committed under the other's chunk message. `chunk_topo` auto-serializes these (v0.8), but a clean blueprint avoids the overlap in the first place. Either split the work into disjoint files, or add explicit `depends_on` to serialize by dependency.
 
 ## Output
 

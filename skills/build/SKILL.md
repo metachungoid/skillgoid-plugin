@@ -54,9 +54,15 @@ Routes a user request through the Skillgoid pipeline:
       - Dispatch (via concurrent `Agent()` calls) only the chunks in the wave that pass both checks.
 
    3b. Build the subagent prompt with the curated context slice:
-      - The chunk entry as YAML (id, description, gate_ids, language, depends_on, paths). The `paths:` field is consumed by `git_iter_commit.py` at commit time — pass it through verbatim so the subagent includes it in its commit invocation.
+      - The chunk entry as YAML (id, description, gate_ids, language, depends_on, paths, gate_overrides). The `paths:` field is consumed by `git_iter_commit.py` at commit time. `gate_overrides` (v0.8) is consumed by the subagent when building its criteria subset per `skills/loop/SKILL.md` step 3.1. Pass both through verbatim.
       - `retrieve_summary` verbatim
-      - `blueprint.md` in full (v0.2 punts on blueprint slicing — passes whole file)
+      - **Sliced blueprint for the chunk** (v0.8, replacing v0.2's punt on slicing). Invoke the slicer:
+        ```
+        python <plugin-root>/scripts/blueprint_slice.py \
+          --blueprint .skillgoid/blueprint.md \
+          --chunk-id <chunk_id>
+        ```
+        Use the output as the "Blueprint (relevant)" section of the subagent prompt. Subagents receive their chunk's section + `## Architecture overview` + `## Cross-chunk types` (when present) — NOT the full blueprint. Prevents the ahead-of-scope implementation pattern observed in the minischeme stress run (F7). If the slicer exits 2 (no `## <chunk_id>` section), surface the error and do NOT dispatch — this is a blueprint authoring error the plan step should have caught.
       - Any existing `.skillgoid/iterations/*.json` records for this chunk (if resuming; up to last 2)
       - Optional `integration_failure_context` slot for integration auto-repair or `/skillgoid:unstick` hints
 
