@@ -29,7 +29,13 @@ Runs a shallow pre-flight check on every gate (and integration_gate) in `.skillg
    - `import-clean` → `module` field is non-empty and matches `^[a-zA-Z_][a-zA-Z0-9_.]*$`.
    - `coverage` → `pytest --cov --version` succeeds (verifies pytest-cov is installed).
    - `cli-command-runs`, `run-command` → `command[0]` is resolvable on PATH OR declared in `env:` OR is bare `python` (auto-resolved to sys.executable).
-3. **For each gate with `env:`** — check PATH-like values (`PYTHONPATH`, `PATH`): relative paths must resolve under the project dir (`src/` exists if `PYTHONPATH: src` is declared).
+3. **For each gate with `env:`** — check PATH-like values (`PYTHONPATH`, `PATH`):
+   - If the path value is **absolute**: must exist. Failure is hard.
+   - If the path value is **relative** (e.g., `src`): resolve against project dir.
+     - If it exists: ok.
+     - If it doesn't exist AND the resolved path is within the project dir: downgrade to a WARNING with hint `"relative path '<path>' doesn't exist yet — if your scaffold chunk creates it, this is expected on a fresh project; otherwise fix the config"`. Warnings don't block feasibility on this check alone.
+     - If it doesn't exist AND the resolved path is outside the project dir: hard failure.
+   - Rationale: on fresh projects, scaffold chunks create `src/`, `tests/`, etc. Failing feasibility on paths the build loop will create is a false positive — observed in real runs on taskq and mdstats (both flagged `PYTHONPATH: src` before scaffold had a chance to create the directory).
 4. **Emit a structured report** to stdout (JSON):
 ```json
 {
