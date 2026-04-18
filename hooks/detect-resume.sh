@@ -42,18 +42,35 @@ try:
 
     iters_dir = sg / "iterations"
     if iters_dir.is_dir():
-        iter_files = sorted(iters_dir.glob("*.json"))
+        iter_files = list(iters_dir.glob("*.json"))
         if iter_files:
-            latest = iter_files[-1]
+            # Use mtime to find the most recently written iteration (not alphabetical).
+            latest = max(iter_files, key=lambda p: p.stat().st_mtime)
             try:
                 rec = json.loads(latest.read_text())
                 chunk_id = rec.get("chunk_id", "?")
-                exit_reason = rec.get("exit_reason", "in_progress")
+                # exit_reason is canonical; fall back to status for subagents that use that field
+                exit_reason = rec.get("exit_reason") or rec.get("status") or "in_progress"
                 report = rec.get("gate_report", {})
-                gates_passed = report.get("passed", "?")
+                # gate_report may be a flat list or a {passed, results} dict.
+                if isinstance(report, list):
+                    gates_passed = all(r.get("passed", True) for r in report)
+                else:
+                    gates_passed = report.get("passed", "?")
+                # Also count completed vs total chunks from iteration files.
+                def _is_success(rec: dict) -> bool:
+                    r = rec.get("exit_reason") or rec.get("status") or ""
+                    return r == "success"
+                completed = {
+                    json.loads(f.read_text()).get("chunk_id")
+                    for f in iter_files
+                    if _is_success(json.loads(f.read_text()))
+                }
                 summary_parts.append(
                     f"Latest iteration: chunk={chunk_id}, exit={exit_reason}, gates_passed={gates_passed}."
                 )
+                if completed:
+                    summary_parts.append(f"Completed chunks: {sorted(completed)}.")
             except Exception:
                 pass  # skip latest-iteration summary on any parse error
 

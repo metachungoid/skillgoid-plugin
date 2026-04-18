@@ -35,7 +35,7 @@ try:
     except Exception:
         sys.exit(0)  # malformed iteration — don't block
 
-    exit_reason = rec.get("exit_reason", "in_progress")
+    exit_reason = rec.get("exit_reason") or rec.get("status") or "in_progress"
     report = rec.get("gate_report", {})
 
     # gate_report may be a flat list (natural subagent output) or a dict {passed, results}.
