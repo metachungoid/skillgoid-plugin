@@ -22,6 +22,11 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
 
 ## Procedure
 
+## Configuration notes
+
+- `criteria.yaml → loop.max_attempts` — maximum iterations per chunk (default 5).
+- `criteria.yaml → loop.skip_git` — set to `true` to disable git-per-iteration commits in this project (default `false`). Useful for projects that have strict commit-message conventions.
+
 Setup
 1. **Read** `.skillgoid/chunks.yaml` and `.skillgoid/criteria.yaml`. Find the chunk by ID.
 2. **Resolve language:** chunk `language:` field > criteria `language:` field. If neither, ask the user.
@@ -45,14 +50,27 @@ Loop (iteration N = 1, 2, 3, ...)
      "gate_report": { ... verbatim from adapter ... },
      "reflection": "<1–3 paragraphs: what was tried, what failed, hypothesis for next attempt>",
      "notable": false,
-     "failure_signature": "<hash of (gate_ids_failing + first 200 chars of stderr)>"
+     "failure_signature": "<computed via scripts/stall_check.py>",
+     "exit_reason": "in_progress"
    }
    ```
    Mark `notable: true` when the reflection surfaces a non-obvious lesson (unexpected tool behavior, surprising library edge case, a design decision that changed the plan). Boring iterations stay `notable: false`.
+
+   After writing the file, compute and persist the stall signature by running:
+   ```bash
+   SIG=$(python <plugin-root>/scripts/stall_check.py .skillgoid/iterations/NNN.json)
+   # Update the file's failure_signature field to $SIG (re-serialize the JSON).
+   ```
+
+8.1. **Git commit step.** Run:
+   ```bash
+   python <plugin-root>/scripts/git_iter_commit.py --project <project_path> --iteration .skillgoid/iterations/NNN.json
+   ```
+   This commits the iteration's changes with a structured message. On non-git projects it silently noops. Skip this step entirely if `criteria.yaml → loop.skip_git == true`.
 9. **Exit conditions — evaluate in order:**
    - **Success:** `gate_report.passed == true` for all structured gates. Write a final iteration record with `exit_reason: "success"` and return.
    - **Budget exhausted:** `N >= max_attempts`. Write `exit_reason: "budget_exhausted"` and return with failure.
-   - **No-progress stall:** `failure_signature` on this iteration matches the previous iteration. Write `exit_reason: "stalled"`, surface a summary to the user, and return with failure.
+   - **No-progress stall:** the current iteration's `failure_signature` exactly equals the previous iteration's `failure_signature`. (Use `scripts/stall_check.py` — never rely on judgment.) Write `exit_reason: "stalled"`, surface a summary to the user, and return with failure.
    - **Otherwise:** increment N and continue the loop.
 
 ## Acceptance scenarios (soft)
