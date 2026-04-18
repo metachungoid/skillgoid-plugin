@@ -287,14 +287,18 @@ def _gate_coverage(gate: dict, project: Path) -> GateResult:
     min_percent = gate.get("min_percent", 80)
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
 
-    # Env with src on PYTHONPATH (same pattern as _gate_pytest)
-    env_path = str(project / "src")
-    existing = os.environ.get("PYTHONPATH", "")
-    env = {**os.environ, "PYTHONPATH": env_path + (os.pathsep + existing if existing else "")}
+    gate_env = gate.get("env") or {}
+    env = _merge_env(project, gate_env)
+    if "PYTHONPATH" not in gate_env:
+        env_path = str(project / "src")
+        existing = os.environ.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = env_path + (os.pathsep + existing if existing else "")
 
-    # Write coverage JSON to a tmp file to avoid polluting project root
+    # Write coverage JSON to system tempdir (not project dir) so a killed gate
+    # never leaves a stray file in the project tree that `git add -A` could
+    # pick up. The finally-block cleanup still applies.
     with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False, dir=str(project)
+        mode="w", suffix=".json", delete=False, dir=tempfile.gettempdir()
     ) as tf:
         cov_path = Path(tf.name)
 
