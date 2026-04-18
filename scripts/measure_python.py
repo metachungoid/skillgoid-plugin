@@ -187,10 +187,12 @@ def _gate_mypy(gate: dict, project: Path) -> GateResult:
         )
     args = gate.get("args") or ["."]
     timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
+    env = _merge_env(project, gate.get("env") or {})
     try:
         proc = subprocess.run(
             [str(mypy_bin), *args],
             cwd=project,
+            env=env,
             capture_output=True,
             text=True,
             check=False,
