@@ -31,6 +31,16 @@ claude plugin install .
 5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
 6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
 
+## What's new in v0.2
+
+Three structural upgrades that make the build loop credible on real projects:
+
+- **Subagent-per-chunk isolation.** Each chunk runs in a fresh subagent with a curated context slice — the main session stays small, cross-chunk interference goes away, and long projects no longer burn tokens on accumulated context.
+- **Deterministic stall detection + git-per-iteration.** Stalls are now detected by hash comparison, not judgment. Every iteration produces a git commit (`skillgoid: iter N of chunk <id> …`) for free rollback targets. Opt out with `loop.skip_git: true` in `criteria.yaml`.
+- **Integration gate.** Opt-in `integration_gates:` block in `criteria.yaml` runs after all per-chunk gates pass — catches "green gates, broken product" failures. Up to 2 auto-repair retries before surfacing.
+
+All changes are backward-compatible. Existing v0 projects resume unchanged.
+
 ## Concepts
 
 - **`.skillgoid/`** — project-local state: `goal.md`, `criteria.yaml`, `blueprint.md`, `chunks.yaml`, `iterations/NNN.json`, `retrospective.md`.
