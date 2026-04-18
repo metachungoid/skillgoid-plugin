@@ -83,14 +83,17 @@ Turns a one-line user goal into:
      (`$SKILLGOID_PYTHON` is set by the adapter to `sys.executable` — guaranteed-working interpreter path inside shell strings.)
    - **Unknown or ambiguous:** leave `integration_gates` empty; the user can add one later.
 
-5.2. **Default coverage gate for Python projects with pytest.** When the project is Python and `gates` includes a `pytest` gate, propose adding a `coverage` gate to `gates` as well:
+5.2. **Default coverage gate for Python projects — place in `integration_gates`, not per-chunk `gate_ids`.** Propose a `coverage` entry under `integration_gates:`, NOT inside `gates:`. Rationale: coverage is a whole-package metric. If coverage lives inside `gates:` and chunks reference it via `gate_ids`, it will fail false-positive on every chunk until the last chunk touching the package lands — producing iteration-budget churn for no fault of the chunk being evaluated. Moving it to `integration_gates` runs it once after all chunks pass, which matches the metric's semantic scope.
+
    ```yaml
-   - id: cov
-     type: coverage
-     target: "<package-name>"   # e.g., mypkg; default "." if unclear
-     min_percent: 80
-     compare_to_baseline: false  # opt in later if desired
+   integration_gates:
+     - id: cov
+       type: coverage
+       target: "<package-name>"   # e.g., mypkg; default "." if unclear
+       min_percent: 80
+       compare_to_baseline: false  # opt in later if desired
    ```
+
    Omit for non-Python projects or when the user explicitly opts out. `compare_to_baseline: false` by default — users who want regression detection flip it to `true` once a solid baseline exists.
 
    **Important caveat when combining coverage + CLI gates.** If the project also has a `cli-command-runs` gate (typical CLI project), include this note in the proposed `criteria.yaml` right above the `coverage` gate:
@@ -103,7 +106,7 @@ Turns a one-line user goal into:
    # register as uncovered and this gate will fail.
    ```
 
-   This prevents the "pytest passes, ruff passes, coverage drops on the CLI chunk" failure mode observed on real runs.
+   This prevents the "pytest passes, ruff passes, coverage drops on the CLI chunk" failure mode observed on real runs. (Note: with v0.7 putting coverage into integration_gates, this failure mode now applies to the integration phase, not any individual chunk.)
 
 5.3. **Default `.gitignore` for Python projects.** If the project directory has no `.gitignore`, propose adding one. Without it, the per-iteration `git_iter_commit.py` commits bytecode and cache artifacts (`__pycache__/`, `.pytest_cache/`, etc.) that pollute iteration `changes` fields and make retrospect noisy. Use this minimal template:
 
@@ -118,7 +121,10 @@ Turns a one-line user goal into:
    *.egg-info/
    build/
    dist/
+   /tmp*.json
    ```
+
+   `/tmp*.json` (v0.7) guards against scratch files that slip the loop skill's `/tmp` discipline. If a subagent accidentally writes a stall-check temp file in the project root, git-add-A would sweep it into the iteration commit. Belt-and-suspenders.
 
    If `.gitignore` already exists, propose additions of any missing lines — **do not overwrite the user's existing file.** Skip this step entirely for non-Python projects (a future task will add language-appropriate templates).
 
