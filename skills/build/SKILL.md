@@ -48,9 +48,19 @@ Routes a user request through the Skillgoid pipeline:
 
    For each wave in order:
 
-   3a. For each chunk in the wave (in parallel, via concurrent `Agent()` calls), check dependencies (safety re-check): every listed `chunk.depends_on` must have exited successfully in a prior wave.
+   3a. For each chunk in the wave:
+      - **Resume-skip:** if the chunk's latest iteration record in `.skillgoid/iterations/` already has `exit_reason: "success"`, skip it entirely — do not dispatch a new subagent. This preserves v0.4-style resume behavior when some wave siblings already succeeded in a prior run.
+      - **Dependency check:** every listed `chunk.depends_on` must have exited successfully in a prior wave.
+      - Dispatch (via concurrent `Agent()` calls) only the chunks in the wave that pass both checks.
 
-   3b. Build the subagent prompt with the curated context slice (same template as v0.4 — chunk spec, retrieve_summary, blueprint, prior iterations if resuming, optional integration_failure_context on re-dispatch).
+   3b. Build the subagent prompt with the curated context slice:
+      - The chunk entry as YAML (id, description, gate_ids, language, depends_on)
+      - `retrieve_summary` verbatim
+      - `blueprint.md` in full (v0.2 punts on blueprint slicing — passes whole file)
+      - Any existing `.skillgoid/iterations/*.json` records for this chunk (if resuming; up to last 2)
+      - Optional `integration_failure_context` slot for integration auto-repair or `/skillgoid:unstick` hints
+
+      Use the subagent prompt template (same as v0.2/v0.3/v0.4 — see step 3c's Agent call for the full prompt body).
 
    3c. Dispatch each chunk's subagent concurrently:
       ```
