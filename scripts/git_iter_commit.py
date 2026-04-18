@@ -14,6 +14,8 @@ Contract:
 from __future__ import annotations
 
 import argparse
+import contextlib
+import fcntl
 import json
 import subprocess
 import sys
@@ -58,6 +60,40 @@ def _build_message(record: dict) -> str:
     )
 
 
+@contextlib.contextmanager
+def _commit_lock(project: Path):
+    """Hold an exclusive flock on .git/skillgoid-commit.lock for the duration
+    of the add+commit sequence. Serializes concurrent git_iter_commit
+    invocations so parallel-wave subagents can't race on git's index. Posix
+    fcntl-based; on non-posix platforms the lock degrades to a no-op (the
+    file is still created, but flock() raises and we fall back to no
+    serialization). Block until the lock is acquired."""
+    lock_path = project / ".git" / "skillgoid-commit.lock"
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        yield
+        return
+    try:
+        fd = open(lock_path, "w")
+    except OSError:
+        yield
+        return
+    try:
+        try:
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+        except (OSError, AttributeError):
+            # Non-posix or unsupported: degrade to no serialization.
+            pass
+        yield
+    finally:
+        try:
+            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+        except (OSError, AttributeError):
+            pass
+        fd.close()
+
+
 def commit_iteration(
     project: Path,
     record: dict,
@@ -70,6 +106,12 @@ def commit_iteration(
     When `chunks_file` is provided AND the chunk referenced by record.chunk_id
     has a `paths:` list, stage only those paths + the iteration file. Otherwise
     fall back to `git add -A` with a stderr warning.
+
+    Acquires an exclusive flock on .git/skillgoid-commit.lock for the entire
+    add+commit sequence so concurrent invocations from parallel-wave
+    subagents serialize cleanly (without it, two processes' `git add` calls
+    interleave on the shared git index and produce cross-contaminated
+    commits).
     """
     if not is_git_repo(project):
         return False
@@ -78,30 +120,31 @@ def commit_iteration(
     chunk_id = record.get("chunk_id", "")
     scoped_paths = _resolve_scoped_paths(project, chunk_id, chunks_file, iteration_path)
 
-    try:
-        if scoped_paths is not None:
+    with _commit_lock(project):
+        try:
+            if scoped_paths is not None:
+                subprocess.run(
+                    ["git", "add", "--", *scoped_paths],
+                    cwd=project, check=True, capture_output=True,
+                )
+            else:
+                sys.stderr.write(
+                    f"git_iter_commit: chunk {chunk_id!r} has no paths: declared, "
+                    f"falling back to 'git add -A' — consider adding paths: for "
+                    f"safer parallel waves\n"
+                )
+                subprocess.run(
+                    ["git", "add", "-A"],
+                    cwd=project, check=True, capture_output=True,
+                )
             subprocess.run(
-                ["git", "add", "--", *scoped_paths],
+                ["git", "commit", "--allow-empty", "-m", message],
                 cwd=project, check=True, capture_output=True,
             )
-        else:
-            sys.stderr.write(
-                f"git_iter_commit: chunk {chunk_id!r} has no paths: declared, "
-                f"falling back to 'git add -A' — consider adding paths: for "
-                f"safer parallel waves\n"
-            )
-            subprocess.run(
-                ["git", "add", "-A"],
-                cwd=project, check=True, capture_output=True,
-            )
-        subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", message],
-            cwd=project, check=True, capture_output=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        stderr = exc.stderr.decode("utf-8", errors="replace") if exc.stderr else ""
-        sys.stderr.write(f"git_iter_commit: {stderr}")
-        return False
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr.decode("utf-8", errors="replace") if exc.stderr else ""
+            sys.stderr.write(f"git_iter_commit: {stderr}")
+            return False
     return True
 
 
