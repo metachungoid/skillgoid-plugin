@@ -129,3 +129,15 @@ def test_iterations_schema_rejects_unknown_exit_reason():
     }
     errors = list(_validator("iterations.schema.json").iter_errors(record))
     assert any(e.validator == "enum" for e in errors)
+
+
+def test_criteria_gate_timeout_is_integer():
+    data = {"gates": [{"id": "p", "type": "pytest", "timeout": 60}]}
+    errors = list(_validator("criteria.schema.json").iter_errors(data))
+    assert errors == []
+
+
+def test_criteria_gate_timeout_must_be_positive():
+    data = {"gates": [{"id": "p", "type": "pytest", "timeout": 0}]}
+    errors = list(_validator("criteria.schema.json").iter_errors(data))
+    assert any(e.validator == "minimum" for e in errors)

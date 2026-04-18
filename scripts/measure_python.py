@@ -22,6 +22,8 @@ from typing import Any
 
 import yaml
 
+DEFAULT_GATE_TIMEOUT = 300
+
 
 @dataclass
 class GateResult:
@@ -32,8 +34,15 @@ class GateResult:
     hint: str
 
 
-def _run(cmd: list[str], cwd: Path) -> tuple[int, str, str]:
-    proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
+def _run(cmd: list[str], cwd: Path, timeout: int | None = None) -> tuple[int, str, str]:
+    try:
+        proc = subprocess.run(
+            cmd, cwd=cwd, capture_output=True, text=True, check=False, timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = exc.stdout.decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err = exc.stderr.decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        return 124, out, err  # 124 = conventional timeout exit code
     return proc.returncode, proc.stdout, proc.stderr
 
 
@@ -52,7 +61,11 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
     if not cmd:
         return GateResult(gate["id"], False, "", "", "no command specified; add `command:` to gate")
     expect_exit = gate.get("expect_exit", 0)
-    code, out, err = _run(cmd, project)
+    timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
+    code, out, err = _run(cmd, project, timeout=timeout)
+    if code == 124:
+        return GateResult(gate["id"], False, out, err,
+                          f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
     passed = code == expect_exit
     hint = "" if passed else f"exit={code}, expected {expect_exit}"
     return GateResult(gate["id"], passed, out, err, hint)
@@ -60,17 +73,25 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
 
 def _gate_pytest(gate: dict, project: Path) -> GateResult:
     args = gate.get("args") or []
+    timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
     env_path = str(project / "src")
     existing = os.environ.get("PYTHONPATH", "")
     env = {**os.environ, "PYTHONPATH": env_path + (os.pathsep + existing if existing else "")}
-    proc = subprocess.run(
-        [sys.executable, "-m", "pytest", *args],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pytest", *args],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = (exc.stdout or b"").decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err = (exc.stderr or b"").decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        return GateResult(gate["id"], False, out, err,
+                          f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
     passed = proc.returncode == 0
     hint = "" if passed else "pytest exited nonzero — read stdout for failing test names"
     return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
@@ -84,13 +105,21 @@ def _gate_ruff(gate: dict, project: Path) -> GateResult:
             "ruff not found next to the python interpreter or on PATH — install with `pip install ruff`",
         )
     args = gate.get("args") or ["check", "."]
-    proc = subprocess.run(
-        [str(ruff_bin), *args],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
+    try:
+        proc = subprocess.run(
+            [str(ruff_bin), *args],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = (exc.stdout or b"").decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err = (exc.stderr or b"").decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        return GateResult(gate["id"], False, out, err,
+                          f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
     passed = proc.returncode == 0
     hint = "" if passed else "ruff flagged lint issues — fix or add to ignore config"
     return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
@@ -104,13 +133,21 @@ def _gate_mypy(gate: dict, project: Path) -> GateResult:
             "mypy not found next to python interpreter or on PATH — install with `pip install mypy`",
         )
     args = gate.get("args") or ["."]
-    proc = subprocess.run(
-        [str(mypy_bin), *args],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
+    try:
+        proc = subprocess.run(
+            [str(mypy_bin), *args],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = (exc.stdout or b"").decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err = (exc.stderr or b"").decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        return GateResult(gate["id"], False, out, err,
+                          f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
     passed = proc.returncode == 0
     hint = "" if passed else "mypy reported type errors — read stdout"
     return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
@@ -125,14 +162,22 @@ def _gate_import_clean(gate: dict, project: Path) -> GateResult:
         **os.environ,
         "PYTHONPATH": str(project / "src") + (os.pathsep + existing if existing else ""),
     }
-    proc = subprocess.run(
-        [sys.executable, "-c", f"import {module}"],
-        cwd=project,
-        capture_output=True,
-        text=True,
-        env=env,
-        check=False,
-    )
+    timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", f"import {module}"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+            env=env,
+            check=False,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as exc:
+        out = (exc.stdout or b"").decode("utf-8", errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
+        err = (exc.stderr or b"").decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        return GateResult(gate["id"], False, out, err,
+                          f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
     passed = proc.returncode == 0
     hint = "" if passed else f"import failed: {proc.stderr.strip()[:200]}"
     return GateResult(gate["id"], passed, proc.stdout, proc.stderr, hint)
@@ -142,9 +187,13 @@ def _gate_cli_command_runs(gate: dict, project: Path) -> GateResult:
     cmd = gate.get("command") or []
     expect_exit = gate.get("expect_exit", 0)
     expect_match = gate.get("expect_stdout_match")
+    timeout = gate.get("timeout", DEFAULT_GATE_TIMEOUT)
     if not cmd:
         return GateResult(gate["id"], False, "", "", "no command specified; add `command:` to gate")
-    code, out, err = _run(cmd, project)
+    code, out, err = _run(cmd, project, timeout=timeout)
+    if code == 124:
+        return GateResult(gate["id"], False, out, err,
+                          f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
     hint_parts: list[str] = []
     passed = code == expect_exit
     if not passed:
