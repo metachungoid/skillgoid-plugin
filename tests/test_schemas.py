@@ -43,3 +43,15 @@ def test_unknown_gate_type_fails():
     bad = {"gates": [{"id": "x", "type": "unknown-gate"}]}
     errors = list(_validator("criteria.schema.json").iter_errors(bad))
     assert any(e.validator == "enum" for e in errors)
+
+
+def test_chunk_missing_gate_ids_fails():
+    bad = {"chunks": [{"id": "x", "description": "no gates"}]}
+    errors = list(_validator("chunks.schema.json").iter_errors(bad))
+    assert any(e.validator == "required" and "gate_ids" in str(e.message) for e in errors)
+
+
+def test_chunk_empty_gate_ids_fails():
+    bad = {"chunks": [{"id": "x", "description": "y", "gate_ids": []}]}
+    errors = list(_validator("chunks.schema.json").iter_errors(bad))
+    assert any(e.validator == "minItems" for e in errors)
