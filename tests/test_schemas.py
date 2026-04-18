@@ -141,3 +141,33 @@ def test_criteria_gate_timeout_must_be_positive():
     data = {"gates": [{"id": "p", "type": "pytest", "timeout": 0}]}
     errors = list(_validator("criteria.schema.json").iter_errors(data))
     assert any(e.validator == "minimum" for e in errors)
+
+
+def test_iterations_schema_accepts_changes_field():
+    record = {
+        "iteration": 1,
+        "chunk_id": "x",
+        "gate_report": {"passed": True, "results": []},
+        "changes": {
+            "files_touched": ["a.py"],
+            "net_lines": 5,
+            "diff_summary": "a.py: +5/-0",
+        },
+    }
+    errors = list(_validator("iterations.schema.json").iter_errors(record))
+    assert errors == []
+
+
+def test_iterations_schema_rejects_non_integer_net_lines():
+    record = {
+        "iteration": 1,
+        "chunk_id": "x",
+        "gate_report": {"passed": True, "results": []},
+        "changes": {
+            "files_touched": ["a.py"],
+            "net_lines": "lots",
+            "diff_summary": "",
+        },
+    }
+    errors = list(_validator("iterations.schema.json").iter_errors(record))
+    assert any(e.validator == "type" for e in errors)

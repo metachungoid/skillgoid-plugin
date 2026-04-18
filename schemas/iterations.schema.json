@@ -40,6 +40,14 @@
       "pattern": "^[0-9a-f]{16}$",
       "description": "16-char hex signature from scripts/stall_check.py"
     },
+    "changes": {
+      "type": "object",
+      "properties": {
+        "files_touched": {"type": "array", "items": {"type": "string"}},
+        "net_lines": {"type": "integer"},
+        "diff_summary": {"type": "string"}
+      }
+    },
     "exit_reason": {
       "type": "string",
       "enum": ["in_progress", "success", "budget_exhausted", "stalled"]

@@ -51,6 +51,7 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
      "reflection": "<1–3 paragraphs: what was tried, what failed, hypothesis for next attempt>",
      "notable": false,
      "failure_signature": "<16-char hex from stall_check.py>",
+     "changes": {"files_touched": [...], "net_lines": <int>, "diff_summary": "..."},
      "exit_reason": "in_progress"
    }
    ```
@@ -61,6 +62,13 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
    python <plugin-root>/scripts/git_iter_commit.py --project <project_path> --iteration .skillgoid/iterations/NNN.json
    ```
    This commits the iteration's changes with a structured message. On non-git projects it silently noops. Skip this step entirely if `criteria.yaml → loop.skip_git == true`.
+
+8.2. **Record diff summary.** Immediately after the git commit lands, capture what changed:
+   ```bash
+   python <plugin-root>/scripts/diff_summary.py --project <project_path>
+   ```
+   The output JSON has shape `{files_touched: [...], net_lines: int, diff_summary: str}`. Inject this as the `changes` field when writing `iterations/NNN.json`. If `loop.skip_git == true` or the project isn't a git repo (`diff_summary.py` returns `"git not available"`), omit the `changes` field.
+
 9. **Exit conditions — evaluate in order:**
    - **Success:** `gate_report.passed == true` for all structured gates. Write a final iteration record with `exit_reason: "success"` and return.
    - **Budget exhausted:** `N >= max_attempts`. Write `exit_reason: "budget_exhausted"` and return with failure.
