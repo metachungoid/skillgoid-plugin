@@ -64,12 +64,31 @@ try:
     if iteration >= max_attempts or exit_reason in ("budget_exhausted", "stalled"):
         sys.exit(0)
 
-    failing_ids = [r.get("gate_id") for r in report.get("results", []) if not r.get("passed")]
-    reason = (
-        f"Skillgoid: gates still failing ({', '.join(filter(None, failing_ids)) or 'unknown'}) and "
-        f"loop budget remains ({iteration}/{max_attempts}). Continue iterating with `/skillgoid:build resume`, "
-        f"or break explicitly with `/skillgoid:build retrospect-only`."
+    failing_results = [r for r in report.get("results", []) if not r.get("passed")]
+    failing_ids = [r.get("gate_id", "?") for r in failing_results]
+
+    # Pick top 2 hints by length (most informative)
+    def _truncate(s: str, n: int = 120) -> str:
+        return s if len(s) <= n else s[: n - 1] + "…"
+
+    hints_by_length = sorted(
+        [(r.get("gate_id", "?"), (r.get("hint") or "")) for r in failing_results],
+        key=lambda pair: len(pair[1]),
+        reverse=True,
     )
+    top_hints = [(gid, h) for gid, h in hints_by_length[:2] if h]
+
+    reason_parts = [
+        f"Skillgoid: gates still failing ({', '.join(filter(None, failing_ids)) or 'unknown'}) and "
+        f"loop budget remains ({iteration}/{max_attempts})."
+    ]
+    for gid, hint in top_hints:
+        reason_parts.append(f"→ {gid} hint: \"{_truncate(hint)}\"")
+    reason_parts.append(
+        "Continue iterating with `/skillgoid:build resume`, "
+        "or break explicitly with `/skillgoid:build retrospect-only`."
+    )
+    reason = "\n".join(reason_parts)
     print(json.dumps({"decision": "block", "reason": reason}))
 except Exception:
     # Any unexpected error: don't block
