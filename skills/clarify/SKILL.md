@@ -84,6 +84,35 @@ Turns a one-line user goal into:
    ```
    Omit for non-Python projects or when the user explicitly opts out. `compare_to_baseline: false` by default — users who want regression detection flip it to `true` once a solid baseline exists.
 
+   **Important caveat when combining coverage + CLI gates.** If the project also has a `cli-command-runs` gate (typical CLI project), include this note in the proposed `criteria.yaml` right above the `coverage` gate:
+
+   ```yaml
+   # NOTE: pytest-cov does not instrument subprocess calls.
+   # Combine this coverage gate with in-process CLI tests that call
+   # your main(argv) directly with monkeypatched sys.stdin/stdout,
+   # not just subprocess-based tests. Otherwise CLI code will
+   # register as uncovered and this gate will fail.
+   ```
+
+   This prevents the "pytest passes, ruff passes, coverage drops on the CLI chunk" failure mode observed on real runs.
+
+5.3. **Default `.gitignore` for Python projects.** If the project directory has no `.gitignore`, propose adding one. Without it, the per-iteration `git_iter_commit.py` commits bytecode and cache artifacts (`__pycache__/`, `.pytest_cache/`, etc.) that pollute iteration `changes` fields and make retrospect noisy. Use this minimal template:
+
+   ```gitignore
+   __pycache__/
+   *.pyc
+   .pytest_cache/
+   .ruff_cache/
+   .mypy_cache/
+   .coverage
+   .venv/
+   *.egg-info/
+   build/
+   dist/
+   ```
+
+   If `.gitignore` already exists, propose additions of any missing lines — **do not overwrite the user's existing file.** Skip this step entirely for non-Python projects (a future task will add language-appropriate templates).
+
 6. **Show both files to the user for approval** before returning. Offer to add/remove gates.
 7. **Validate** `criteria.yaml` against `schemas/criteria.schema.json` (run `python -c "import json,yaml,jsonschema; jsonschema.validate(yaml.safe_load(open('.skillgoid/criteria.yaml')), json.load(open('<plugin-root>/schemas/criteria.schema.json')))"`). If validation fails, fix and retry.
 
