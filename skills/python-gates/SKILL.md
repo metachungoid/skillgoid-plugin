@@ -33,6 +33,8 @@ Given a project path and a list of gate IDs (a subset of `.skillgoid/criteria.ya
 
 **Note:** gates may also carry an `env:` dict (string → string). The adapter merges it into the subprocess environment. Useful for passing `PYTHONPATH: src` on projects not yet installed via `pip install -e .`. Relative PATH/PYTHONPATH values are resolved against the project dir.
 
+**Note:** the adapter always exports `SKILLGOID_PYTHON=sys.executable` into the gate subprocess. Inside shell command strings (e.g., `["bash", "-c", "..."]`), reference `$SKILLGOID_PYTHON` instead of bare `python` to get a guaranteed-working interpreter path. The bare-`python` auto-resolution (v0.4) applies only to `command[0]`, so it won't help when `python` appears inside a shell pipeline. `$SKILLGOID_PYTHON` does.
+
 4. Parse stdout as JSON. The shape is:
    ```json
    {"passed": bool, "results": [{"gate_id": str, "passed": bool, "stdout": str, "stderr": str, "hint": str}]}

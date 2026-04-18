@@ -71,7 +71,16 @@ Turns a one-line user goal into:
          type: import-clean
          module: mylib
      ```
-   - **Service:** if the user can describe a start/health-check/shutdown sequence, generate a `run-command` that does all three. Otherwise leave `integration_gates` empty and note that one should be added by hand.
+   - **Service:** if the user can describe a start/health-check/shutdown sequence, generate a `run-command` that does all three. Otherwise leave `integration_gates` empty and note that one should be added by hand. When the service needs a shell pipeline, use `$SKILLGOID_PYTHON` instead of bare `python`:
+     ```yaml
+     integration_gates:
+       - id: service_smoke
+         type: run-command
+         command: ["bash", "-c", "$SKILLGOID_PYTHON -m myservice --port 8999 & sleep 1 && curl -sf http://localhost:8999/health && kill %1"]
+         env:
+           PYTHONPATH: "src"
+     ```
+     (`$SKILLGOID_PYTHON` is set by the adapter to `sys.executable` — guaranteed-working interpreter path inside shell strings.)
    - **Unknown or ambiguous:** leave `integration_gates` empty; the user can add one later.
 
 5.2. **Default coverage gate for Python projects with pytest.** When the project is Python and `gates` includes a `pytest` gate, propose adding a `coverage` gate to `gates` as well:
