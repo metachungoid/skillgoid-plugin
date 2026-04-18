@@ -26,40 +26,47 @@ Six additive polish items, zero architectural change:
 Spec: `docs/superpowers/specs/2026-04-17-skillgoid-v0.3-polish-observe.md`
 Plan: `docs/superpowers/plans/2026-04-17-skillgoid-v0.3.md`
 
-## Deferred — v0.4 goals
+### v0.4 — Integration Polish & Unstick (2026-04-18)
+Observed-ROI reprioritization driven by the first real run (jyctl):
+- Gate `env:` field + python binary auto-resolution
+- Pre-plan feasibility skill (catches env mismatches before iter 1)
+- Unstick skill (one-sentence hint → chunk re-dispatch)
+- `/skillgoid:stats` reader for metrics.jsonl
+- Clarify: default `.gitignore` + subprocess-coverage caveat
+Spec: `docs/superpowers/specs/2026-04-18-skillgoid-v0.4-integration-polish-and-unstick.md`
+Plan: `docs/superpowers/plans/2026-04-18-skillgoid-v0.4.md`
 
-After v0.2 and v0.3 have been used on at least one real project, re-rank these by observed ROI.
+## Deferred — v0.5 goals
 
-### Adaptive / judgment upgrades (highest expected value)
+Items pushed out of v0.4 for lack of real-world evidence. Re-rank after more runs populate `~/.claude/skillgoid/metrics.jsonl`.
 
-- **Plan refinement mid-build.** After chunk N passes, if its iterations surfaced evidence that downstream chunks are miscalibrated, `build` re-invokes `plan` with the new evidence. Currently v0.2/v0.3 surface to user.
-- **Pre-plan feasibility gate.** After `clarify`, a quick adversarial pass before committing to the plan.
-- **Unstick skill.** `/skillgoid:unstick <chunk> "<hint>"` re-dispatches a stalled chunk with the hint injected.
-- **Rehearsal mode.** Dry-run each chunk's first iteration before committing chunks.yaml.
+### Adaptive / judgment (still highest predicted value)
 
-### Scale / throughput upgrades
+- **Plan refinement mid-build.** The single biggest predicted complexity-ceiling lever, but zero real-run evidence yet. Architecturally risky (mutable plan during execution). Revisit after a real project hits a mid-flight replan need.
 
-- **Parallel chunks** (now safer with v0.2's integration gate catching interference).
-- **Polyglot / multi-language projects** — per-chunk adapter + vault across languages.
+### Scale / throughput
 
-### Observability readers (v0.3's scaffolding becomes useful)
+- **Parallel chunks.** Now safer with v0.2's integration gate. Wall-clock wins on multi-chunk independent work.
+- **Polyglot / multi-language projects.** Per-chunk adapter + vault across languages. Unlocks full-stack projects.
 
-- `/skillgoid:stats` — reads `~/.claude/skillgoid/metrics.jsonl` and summarizes.
-- Optional markdown/HTML dashboards.
+### Observability extensions
 
-### Quality / safety upgrades
+- **Rehearsal mode** — dry-run each chunk's first iteration before committing chunks.yaml. May overlap with v0.4's feasibility — revisit only if feasibility proves insufficient.
+- **Dashboards / HTML rendering.** `/skillgoid:stats` markdown is enough until metrics.jsonl has 20+ entries.
 
-- **Tighter vault retrieval.** Instead of reading the whole `<language>-lessons.md`, extract only the 3–5 sections most relevant to `rough_goal`.
+### Quality / safety
 
-### Ecosystem upgrades
+- **Tighter vault retrieval.** Extract the 3–5 most relevant vault sections per goal instead of reading whole files. Only matters at vault scale (50+ projects).
+
+### Ecosystem
 
 - **More language adapters** (`node-gates`, `go-gates`, `rust-gates`).
 - **Gate type plugins** — third-party-contributable gate types without editing `measure_python.py`.
 
-## How to pick up v0.4
+## How to pick up v0.5
 
-After v0.3 has been used on at least one real project:
-1. Read `~/.claude/skillgoid/metrics.jsonl` — which failure modes actually happened?
-2. Read that project's `retrospective.md` and vault additions — which v0.4 items would have helped most?
-3. Re-rank by observed ROI, not predicted ROI.
-4. Spec the top 2–3 items using the same brainstorming → spec → plan → subagent-driven-development flow.
+After v0.4 has landed and run on a few real projects:
+1. Run `/skillgoid:stats` on accumulated metrics.
+2. Look for the most common failure modes in the table.
+3. Re-rank v0.5 items by what actually broke.
+4. Spec the top 2–3 by observed ROI.

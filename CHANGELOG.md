@@ -2,6 +2,24 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## [0.4.0] — 2026-04-18
+
+### Added
+- `scripts/stats_reader.py` — metrics.jsonl summarizer helper.
+- Optional `env:` dict on every gate (merged into subprocess env, path values resolved against project dir).
+- Python binary auto-resolution: bare `python` in gate commands → `sys.executable`. Opt-out via `SKILLGOID_PYTHON_NO_RESOLVE=1`.
+- New skills: `feasibility` (pre-plan gate check), `unstick` (stalled-chunk recovery with hint), `stats` (metrics summary).
+
+### Changed
+- `build` skill wires `feasibility` between `clarify` and `plan`; surfaces `/skillgoid:unstick` on chunk stall/budget-exhaustion.
+- `clarify` skill proposes default `.gitignore` + subprocess-coverage caveat comment on coverage gates.
+- `python-gates` skill documents `env:` field.
+
+### Backward compatibility
+- v0.3 `criteria.yaml` / iteration records parse unchanged.
+- Missing `env:` → no env override, v0.3 behavior.
+- Missing `feasibility` / `unstick` / `stats` skills → never-invoked-implicitly except feasibility (but if the skill is absent, build falls back to direct clarify→plan).
+
 ## [0.3.0] — 2026-04-17
 
 ### Added

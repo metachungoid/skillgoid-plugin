@@ -31,6 +31,19 @@ claude plugin install .
 5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
 6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
 
+## What's new in v0.4
+
+Observed-ROI reprioritization driven by the first real Skillgoid run (jyctl, 2026-04-17):
+
+- **Gate `env:` field.** Gates can now carry an `env:` dict. Lets `cli-command-runs` pass `PYTHONPATH=src` without pre-installing the project.
+- **Python binary auto-resolution.** Bare `python` in command lists is replaced with `sys.executable`, fixing environments where only `python3` is on PATH.
+- **Pre-plan feasibility skill.** `/skillgoid:feasibility` — invoked automatically between `clarify` and `plan` — shallow-checks every gate's tools and commands against the environment before any iteration budget burns.
+- **Unstick skill.** `/skillgoid:unstick <chunk> "<hint>"` — re-dispatch a stalled chunk with a one-sentence human hint injected into the chunk prompt. Autonomy-preservation lever: recovery cost drops from "full manual takeover" to "one sentence."
+- **`/skillgoid:stats` reader.** Cross-project metrics summary — success/stall/budget rates, avg iterations per chunk, language breakdown. Reads `~/.claude/skillgoid/metrics.jsonl` (populated by v0.3's `retrospect`).
+- **Clarify improvements.** Proposes a default `.gitignore` for Python projects; adds a subprocess-coverage caveat comment when coverage + CLI gates are both in play.
+
+All changes fully backward-compatible with v0.3.
+
 ## What's new in v0.3
 
 Six additive polish items, zero architectural change:
