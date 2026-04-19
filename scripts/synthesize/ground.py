@@ -72,10 +72,10 @@ def _migrate_legacy_analogues(sg: Path) -> None:
 
     Idempotent: safe to call on every ground.py run.
     """
-    cache_root = _cache_dir()
     legacy_root = sg / "synthesis" / "analogues"
     if not legacy_root.is_dir():
         return
+    cache_root = _cache_dir()
     for child in sorted(legacy_root.iterdir()):
         if not child.is_dir():
             continue

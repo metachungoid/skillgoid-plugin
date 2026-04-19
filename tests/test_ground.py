@@ -238,7 +238,7 @@ def test_migrate_noop_when_no_legacy(tmp_path, monkeypatch):
     sg.mkdir()
     # Nothing to migrate
     _migrate_legacy_analogues(sg)
-    # No directories created in cache
+    # No migration happened — cache root may not exist, or if it does, it's empty
     cache_root = tmp_path / "cache" / "skillgoid" / "analogues"
-    assert cache_root.is_dir()  # _cache_dir() creates this lazily; OK either way
-    assert list(cache_root.iterdir()) == []
+    if cache_root.exists():
+        assert list(cache_root.iterdir()) == []
