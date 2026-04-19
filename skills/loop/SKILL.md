@@ -155,6 +155,12 @@ finally:
    ```
    The output JSON has shape `{files_touched: [...], net_lines: int, diff_summary: str}`. Inject this as the `changes` field when writing `iterations/NNN.json`. If `loop.skip_git == true` or the project isn't a git repo (`diff_summary.py` returns `"git not available"`), omit the `changes` field.
 
+### Terminal requirement — write the iteration file before returning
+
+Your final action before returning from this invocation must be writing `.skillgoid/iterations/<chunk_id>-NNN.json` and confirming the file exists on disk (e.g. `Path(...).exists()`). The build orchestrator invokes `scripts/verify_iteration_written.py` immediately after you return; a missing or schema-invalid file halts the wave and alerts the user.
+
+Never return with the iteration file unwritten — not on success, not on failure, not on stall. If you encounter an error late in the process (gate adapter crash, unexpected state, partial write), write a record with `exit_reason: "stalled"` and as much context as you have before returning. A partial record is recoverable; no record is not.
+
 9. **Exit conditions — evaluate in order:**
    - **Success:** `gate_report.passed == true` for all structured gates. Write a final iteration record with `exit_reason: "success"` and return.
    - **Budget exhausted:** `N >= max_attempts`. Write `exit_reason: "budget_exhausted"` and return with failure.
