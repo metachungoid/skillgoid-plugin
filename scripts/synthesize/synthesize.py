@@ -49,6 +49,61 @@ class DraftValidationError(ValueError):
     """Raised when subagent output violates the draft contract."""
 
 
+def _collapse_duplicate_coverage(drafts: list[dict]) -> list[dict]:
+    """Merge multiple type: coverage drafts into one (max min_percent wins).
+
+    Provenance refs are unioned into a list. Rationale strings are concatenated
+    with ' + '. Non-coverage drafts pass through unchanged.
+    """
+    coverage_drafts = [d for d in drafts if d.get("type") == "coverage"]
+    if len(coverage_drafts) <= 1:
+        return drafts
+
+    refs: list[str] = []
+    for d in coverage_drafts:
+        prov_ref = d.get("provenance", {}).get("ref")
+        if isinstance(prov_ref, list):
+            refs.extend(prov_ref)
+        elif isinstance(prov_ref, str):
+            refs.append(prov_ref)
+    # Dedupe while preserving first-occurrence order
+    seen: set[str] = set()
+    deduped_refs: list[str] = []
+    for r in refs:
+        if r not in seen:
+            seen.add(r)
+            deduped_refs.append(r)
+
+    merged = {
+        "id": coverage_drafts[0]["id"],
+        "type": "coverage",
+        "min_percent": max(d.get("min_percent", 0) for d in coverage_drafts),
+        "provenance": {
+            "source": coverage_drafts[0].get("provenance", {}).get("source", "analogue"),
+            "ref": deduped_refs if len(deduped_refs) > 1 else deduped_refs[0],
+        },
+        "rationale": " + ".join(
+            d.get("rationale", "") for d in coverage_drafts if d.get("rationale")
+        ),
+    }
+
+    sys.stderr.write(
+        f"collapsed {len(coverage_drafts)} coverage drafts into one "
+        f"(min_percent={merged['min_percent']})\n"
+    )
+
+    out: list[dict] = []
+    merged_emitted = False
+    for d in drafts:
+        if d.get("type") == "coverage":
+            if not merged_emitted:
+                out.append(merged)
+                merged_emitted = True
+            continue
+        out.append(d)
+    return out
+
+
 def parse_subagent_output(raw: str, grounding: dict) -> list[dict]:
     """Parse subagent stdout JSON and validate each draft.
 
@@ -132,6 +187,7 @@ def parse_subagent_output(raw: str, grounding: dict) -> list[dict]:
                     f"(got {min_percent!r})"
                 )
 
+    drafts = _collapse_duplicate_coverage(drafts)
     return drafts
 
 

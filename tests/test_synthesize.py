@@ -325,3 +325,70 @@ def test_parse_rejects_list_ref_containing_unknown():
     })
     with pytest.raises(DraftValidationError, match="provenance ref not found"):
         parse_subagent_output(raw, grounding)
+
+
+def test_parse_collapses_duplicate_coverage_drafts(capsys):
+    grounding = _grounding_payload()
+    # Add a second coverage-capable observation
+    grounding["observations"].append({
+        "source": "analogue",
+        "ref": "mini-flask-demo/.github/workflows/test.yml",
+        "command": "coverage_threshold=95",
+        "context": "CI step declares --fail-under",
+        "observed_type": "coverage_threshold",
+    })
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov_run",
+                "type": "coverage",
+                "min_percent": 80,
+                "provenance": {"source": "analogue", "ref": "mini-flask-demo/pyproject.toml"},
+                "rationale": "from pyproject",
+            },
+            {
+                "id": "cov_report",
+                "type": "coverage",
+                "min_percent": 95,
+                "provenance": {"source": "analogue", "ref": "mini-flask-demo/.github/workflows/test.yml"},
+                "rationale": "from CI step",
+            },
+        ]
+    })
+    drafts = parse_subagent_output(raw, grounding)
+    coverage_drafts = [d for d in drafts if d["type"] == "coverage"]
+    assert len(coverage_drafts) == 1
+    # max threshold wins
+    assert coverage_drafts[0]["min_percent"] == 95
+    # provenance.ref becomes a list
+    assert isinstance(coverage_drafts[0]["provenance"]["ref"], list)
+    assert set(coverage_drafts[0]["provenance"]["ref"]) == {
+        "mini-flask-demo/pyproject.toml",
+        "mini-flask-demo/.github/workflows/test.yml",
+    }
+    # rationale is concatenated
+    assert "from pyproject" in coverage_drafts[0]["rationale"]
+    assert "from CI step" in coverage_drafts[0]["rationale"]
+    # stderr mentions the collapse
+    captured = capsys.readouterr()
+    assert "collapsed 2 coverage drafts" in captured.err
+
+
+def test_parse_single_coverage_draft_not_collapsed(capsys):
+    grounding = _grounding_payload()
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov",
+                "type": "coverage",
+                "min_percent": 80,
+                "provenance": {"source": "analogue", "ref": "mini-flask-demo/pyproject.toml"},
+                "rationale": "x",
+            }
+        ]
+    })
+    drafts = parse_subagent_output(raw, grounding)
+    assert len(drafts) == 1
+    assert isinstance(drafts[0]["provenance"]["ref"], str)  # unchanged
+    captured = capsys.readouterr()
+    assert "collapsed" not in captured.err
