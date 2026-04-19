@@ -63,8 +63,37 @@ Emit ONLY a single JSON object to stdout. No prose, no markdown code fences, no 
 - Use `run-command` for any test-runner-shaped command not covered by the typed enums (e.g., `npm test`, `go test ./...`). The `command` field for `run-command` gates is a list (e.g., `["npm", "test"]`).
 - Default `timeout`: 60 for pytest, 30 for ruff/mypy, 120 for `run-command`. Adjust if the observation context suggests otherwise.
 
+## Canonical shape for `type: coverage`
+
+`type: coverage` is a **declarative threshold gate**, not a runbook step. The
+ONLY CLI-shaped fields it may carry are `target` (optional) and `timeout`.
+Specifically:
+
+- **Required:** `min_percent` (integer, 0-100).
+- **Forbidden:** `args`. The Stage 2 validator rejects any `type: coverage`
+  draft with a non-empty `args`.
+- **How to pick `min_percent`:**
+  - If grounding contains an observation with `observed_type = "coverage_threshold"`,
+    use its value (parse the integer from `coverage_threshold=<N>`). Cite its
+    `ref` in `provenance.ref`.
+  - If two `coverage_threshold` observations disagree (e.g., pyproject says 100,
+    CI says 95), prefer the CI-script value — that's what's actually enforced.
+  - If no `coverage_threshold` observation exists, default to `min_percent: 80`
+    and write `"no threshold found in analogue, defaulting to 80"` in `rationale`.
+    Cite the nearest coverage-related observation (e.g., a pyproject section
+    declaring coverage configured) as `provenance.ref`.
+- **Emit at most one `type: coverage` gate.** If the analogue runs coverage
+  through multiple steps (e.g., `coverage run` then `coverage report`), that's
+  one semantic — one gate.
+
+If the analogue uses the `coverage` CLI in a way that isn't threshold enforcement
+(e.g., `coverage combine`, `coverage erase`, custom post-processing), emit those
+as separate `type: run-command` gates. Don't conflate literal CLI invocation with
+threshold enforcement.
+
 ## Common pitfalls
 
 - Citing a ref like `"shlink/tests/test_redirect.py:42"` when the observation has `"shlink/tests/test_redirect.py"` (without line number) — these don't match. Copy the ref string verbatim.
 - Emitting markdown fences around the JSON. The parser strictly does `json.loads(stdout)`. Anything other than the JSON object causes failure.
 - Inventing gate types like `"smoke"` or `"e2e"` — those aren't in the enum.
+- Emitting `type: coverage` with `args: ["report", "--fail-under=100"]`. The Stage 2 validator rejects this. Use `min_percent: 100` instead (no `args`). If you actually need the literal CLI, emit a separate `type: run-command` gate.
