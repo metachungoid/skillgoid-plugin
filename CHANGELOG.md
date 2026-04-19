@@ -2,6 +2,21 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## 0.10.0 (2026-04-19)
+
+**Breaking:** `type: coverage` gates no longer accept `args`. The loose shape silently dropped `--fail-under=N` thresholds. Migration: replace `args: ['report', '--fail-under=N']` with `min_percent: N`, or switch to `type: run-command` for literal CLI usage.
+
+### Features
+
+- `synthesize-gates` grounds `coverage_threshold` from `[tool.coverage.report].fail_under` and from `--fail-under=N` tokens in CI commands.
+- Subagent prompt teaches the canonical `type: coverage` shape; Stage 2 validator rejects `args` and requires `min_percent` on coverage gates.
+- Duplicate `type: coverage` drafts are collapsed into one (max `min_percent` wins, provenance refs unioned).
+- Analogue clones now live in `~/.cache/skillgoid/analogues/` (or `$XDG_CACHE_HOME/skillgoid/analogues/`) instead of inside the user's project tree. Legacy project-local clones are migrated automatically on next `ground.py` run.
+
+### Fixes
+
+- Analogue clones no longer contaminate the project's lint/type/coverage scope.
+
 ## [0.8.0] — 2026-04-18
 
 ### Changed

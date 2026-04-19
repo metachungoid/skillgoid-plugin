@@ -89,15 +89,14 @@ On failure: a single error line on stderr naming the failed stage. Partial artif
 
 ## Phase 1 limitations (called out for users)
 
-Phase 1.5 addresses the grounding-depth gaps from the initial Phase 1
-(pyproject `[tool.*]` sections are now parsed; CI wrapper scripts are
-followed one level deep). The remaining Phase 2 gaps:
+Phase 1.5 (v0.9.0) addressed pyproject `[tool.*]` section parsing and CI
+wrapper-script following. v0.10 tightens `type: coverage` and relocates
+analogue clones. The remaining Phase 2 gaps:
 
 - All gates are labeled `validated: none (Phase 1: oracle validation deferred)`. The user is the only validator.
 - No context7 grounding — only user-pointed analogues.
 - No curated template fallback for cold-start projects.
 - No retry on subagent output validation failure — re-run the skill if needed.
-- Analogue clones live in a user-global cache (`~/.cache/skillgoid/analogues/` by default, or `$XDG_CACHE_HOME/skillgoid/analogues/`). Project-local clones from earlier versions are migrated automatically on first run.
 
 Phase 2 (planned) addresses all four.
 
@@ -106,3 +105,4 @@ Phase 2 (planned) addresses all four.
 - Synthesis quality is bounded by the analogue quality. A poorly-tested analogue produces poorly-grounded gates.
 - The `criteria.yaml.proposed` may include gate types the user's project doesn't need. The user is expected to delete unwanted gates during review.
 - If two analogue repos use conflicting conventions (e.g., one uses pytest, the other uses unittest), the synthesis subagent picks one — the rationale field should explain why.
+- `type: coverage` gates are now **declarative only**: `min_percent` required, `args` forbidden. Literal `coverage` CLI invocations must use `type: run-command`. Hand-authored criteria from pre-v0.10 that used the loose shape will fail schema validation at the build's feasibility stage — see the v0.10 release note for migration.

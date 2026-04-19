@@ -1,6 +1,6 @@
 {
   "name": "skillgoid",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Criteria-gated autonomous build loop with per-language compounding memory. Define success, build, measure, reflect, loop until gates pass.",
   "author": {"name": "flip"},
   "license": "MIT",
