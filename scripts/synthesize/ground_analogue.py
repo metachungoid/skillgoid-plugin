@@ -187,6 +187,18 @@ def extract_observations(repo: Path) -> list[Observation]:
             observed_type="pytest",
         ))
 
+    # Source 1b: pyproject.toml tool sections (pytest-testpaths-independent)
+    for tool, command, section in parse_pyproject_tool_sections(
+        repo / "pyproject.toml"
+    ):
+        observations.append(Observation(
+            source="analogue",
+            ref=f"{repo_name}/pyproject.toml#{section}",
+            command=command,
+            context=f"pyproject.toml [{section}] section declares {tool} configured",
+            observed_type=tool,
+        ))
+
     # Source 2: GitHub Actions workflow run-steps
     workflows_dir = repo / ".github" / "workflows"
     if workflows_dir.exists():

@@ -198,3 +198,31 @@ def test_parse_pyproject_tool_sections_no_recognized_tools(tmp_path):
     )
     # Neither poetry nor black is in our recognized set.
     assert parse_pyproject_tool_sections(pp) == []
+
+
+def test_extract_observations_emits_from_pyproject_tool_sections(tmp_path):
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text(
+        "[tool.pytest.ini_options]\n"
+        'addopts = "-rxXs"\n'
+        "[tool.ruff.lint]\n"
+        'select = ["E"]\n'
+        "[tool.mypy]\n"
+        "strict = true\n"
+    )
+    obs = extract_observations(repo)
+    # Should include one observation per tool section, in order.
+    types_seen = [o.observed_type for o in obs]
+    assert "pytest" in types_seen
+    assert "ruff" in types_seen
+    assert "mypy" in types_seen
+    # Each pyproject observation refs the section path
+    pyproject_obs = [o for o in obs if "pyproject.toml" in o.ref]
+    refs = {o.ref for o in pyproject_obs}
+    assert "demo/pyproject.toml#tool.pytest.ini_options" in refs
+    assert "demo/pyproject.toml#tool.ruff.lint" in refs
+    assert "demo/pyproject.toml#tool.mypy" in refs
+    # Context names the section
+    for o in pyproject_obs:
+        assert "pyproject.toml" in o.context
