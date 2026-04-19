@@ -51,7 +51,13 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
 7. **Measure step.** Invoke the language-adapter skill:
    - `language == "python"` → `skillgoid:python-gates` with `gate_ids=chunk.gate_ids`.
    - Other languages (v1+) → the matching adapter skill.
-8. **Reflect step.** Before writing the iteration file, compute the stall signature by running `python <plugin-root>/scripts/stall_check.py` against the gate_report (write the gate_report to a temp file if needed, then pass the temp file path as the argument). Include the returned 16-char hex value directly in `failure_signature` on initial write — do not leave a placeholder. Then write `.skillgoid/iterations/<chunk_id>-NNN.json` with (v0.7 convention — one filename namespace per chunk, so parallel chunks never contend). `<chunk_id>` is this chunk's id from chunks.yaml; `NNN` is this chunk's own iteration count, zero-padded to 3 digits (first iteration is 001). Example: `scaffold-001.json`, `py_db-001.json`, `py_db-002.json`. Back-compat note: older projects (pre-v0.7) used unprefixed `NNN.json`. Both conventions coexist in the same iterations dir when a project is resumed across the upgrade; readers handle both.
+8. **Reflect step.** Compute `failure_signature` **before** writing the iteration file — never after, never empty, never `""`. Empty or missing signatures silently break stall detection. The schema rejects any value that is not a 16-char lowercase hex string (pattern `^[0-9a-f]{16}$`). One-liner:
+
+   ```bash
+   failure_signature=$(python <plugin-root>/scripts/stall_check.py <path-to-gate-report.json>)
+   ```
+
+   Write the gate_report to a temp file first (see canonical pattern below), pass that path as the argument, capture stdout as the signature. Then write `.skillgoid/iterations/<chunk_id>-NNN.json` with the captured signature embedded directly — do not leave a placeholder. `<chunk_id>` is this chunk's id from chunks.yaml; `NNN` is this chunk's own iteration count, zero-padded to 3 digits (first iteration is 001). Example: `scaffold-001.json`, `py_db-001.json`, `py_db-002.json`. (v0.7 convention — one filename namespace per chunk, so parallel chunks never contend.) Back-compat note: older projects (pre-v0.7) used unprefixed `NNN.json`. Both conventions coexist in the same iterations dir when a project is resumed across the upgrade; readers handle both.
 
    The iteration record JSON:
    ```json
@@ -96,18 +102,29 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
 
 Any temp files you create during the iteration — including the one used to pass the gate_report to `stall_check.py` — must live under `tempfile.mkdtemp()` or `$TMPDIR`, never inside the project. If a scratch file lands in the project root, `git_iter_commit.py`'s staging will sweep it into the iteration commit (observed in real runs pre-v0.7).
 
-Canonical pattern:
+Canonical pattern — write gate_report to a tempfile, call `stall_check.py`, capture the signature, insert it into the iteration record, then clean up:
 
 ```python
-import tempfile, json
+import json
+import subprocess
+import sys
+import tempfile
 from pathlib import Path
+
+PLUGIN_ROOT = Path("<plugin-root>")  # resolve from CLAUDE_PLUGIN_ROOT or similar
 
 with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False,
                                   dir=tempfile.gettempdir()) as tf:
-    tf.write(json.dumps(gate_report))
+    tf.write(json.dumps({"gate_report": gate_report}))
     scratch = Path(tf.name)
 try:
-    # use scratch
+    proc = subprocess.run(
+        [sys.executable, str(PLUGIN_ROOT / "scripts/stall_check.py"), str(scratch)],
+        capture_output=True, text=True, check=True,
+    )
+    failure_signature = proc.stdout.strip()  # 16-char lowercase hex
+    iteration_record["failure_signature"] = failure_signature
+    # ... then write iteration_record to .skillgoid/iterations/<chunk_id>-NNN.json
 finally:
     scratch.unlink(missing_ok=True)
 ```
