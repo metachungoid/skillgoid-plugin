@@ -2,6 +2,22 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## 0.11.0 (2026-04-19)
+
+### Features
+
+- `synthesize-gates` Stage 3: oracle validation. Every gate in `criteria.yaml.proposed` now carries a `# validated: oracle | smoke-only | none` label derived from running the adapter against the analogue's cache-dir and a type-driven empty scaffold. Failures carry a `# warn:` line explaining the cause.
+- `--skip-validation` flag — bypass Stage 3 and render every gate with `validated: none, warn: validation skipped`.
+- `--validate-only` flag — skip Stages 1–2; re-run Stage 3 + Stage 4 against the existing `drafts.json`. Supports iteration after installing analogue deps.
+- `grounding.json` gains an `analogues: {slug -> absolute_path}` map consumed by Stage 3 to resolve refs to on-disk checkouts.
+- Per-gate-type should-fail scaffolds (`scripts/synthesize/_scaffold.py`): pytest, ruff, mypy, coverage, cli-command-runs, run-command, import-clean.
+
+### Notes
+
+- `validated: oracle` means the gate discriminated the analogue from an empty scaffold — it's a strong signal, not proof of correctness. Review each gate against your own expectations.
+- Oracle runs use the user's active Python environment. Missing analogue deps → `validated: none` with a warn line; install them and re-run with `--validate-only`.
+- No breaking changes.
+
 ## 0.10.0 (2026-04-19)
 
 **Breaking:** `type: coverage` gates no longer accept `args`. The loose shape silently dropped `--fail-under=N` thresholds. Migration: replace `args: ['report', '--fail-under=N']` with `min_percent: N`, or switch to `type: run-command` for literal CLI usage.
