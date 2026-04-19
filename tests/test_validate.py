@@ -154,3 +154,38 @@ def test_coverage_oracle_none_when_pytest_cov_unavailable(tmp_path):
     payload = json.loads(out.read_text())
     assert payload["gates"][0]["validated"] == "none"
     assert "coverage tooling not exerciseable" in payload["gates"][0]["warn"]
+
+
+def test_stage_timeout_short_circuits_remaining_gates(tmp_path):
+    drafts = [
+        {"id": "g1", "type": "pytest", "args": ["tests"],
+         "provenance": {"source": "analogue", "ref": "demo/pyproject.toml"}},
+        {"id": "g2", "type": "pytest", "args": ["tests"],
+         "provenance": {"source": "analogue", "ref": "demo/pyproject.toml"}},
+        {"id": "g3", "type": "pytest", "args": ["tests"],
+         "provenance": {"source": "analogue", "ref": "demo/pyproject.toml"}},
+    ]
+    analogue = tmp_path / "demo"
+    analogue.mkdir()
+    sg = _make_sg(tmp_path, drafts, analogues={"demo": str(analogue)})
+
+    call_count = {"n": 0}
+
+    def _run_gates(criteria, project):
+        call_count["n"] += 1
+        return {"passed": True,
+                "results": [_gate_result(passed=True)]}
+
+    times = iter([0.0, 1.0, 700.0, 700.0, 700.0, 700.0])
+
+    with mock.patch("scripts.synthesize.validate.run_gates", _run_gates), \
+         mock.patch("scripts.synthesize.validate.monotonic",
+                    side_effect=lambda: next(times)):
+        out = run_validate(sg, skip=False, stage_timeout_sec=600)
+
+    payload = json.loads(out.read_text())
+    assert payload["gates"][0]["validated"] != "none"
+    assert payload["gates"][1]["validated"] == "none"
+    assert "stage-timeout exceeded" in payload["gates"][1]["warn"]
+    assert payload["gates"][2]["validated"] == "none"
+    assert "stage-timeout exceeded" in payload["gates"][2]["warn"]

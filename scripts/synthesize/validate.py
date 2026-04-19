@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from time import monotonic
 
 _ROOT = Path(__file__).resolve().parents[2]
 if str(_ROOT) not in sys.path:
@@ -176,7 +177,19 @@ def run_validate(sg: Path, skip: bool = False, stage_timeout_sec: int = 600) -> 
     else:
         grounding = load_json(synthesis_path(sg, "grounding.json"))
         analogues_map = grounding.get("analogues", {})
-        entries = [_oracle_one_gate(d, analogues_map) for d in drafts]
+
+        entries: list[dict] = []
+        start = monotonic()
+        for draft in drafts:
+            if monotonic() - start >= stage_timeout_sec:
+                entries.append({
+                    "id": draft["id"], "validated": "none",
+                    "warn": "Stage 3 stage-timeout exceeded",
+                    "oracle_run": None,
+                })
+                continue
+            entries.append(_oracle_one_gate(draft, analogues_map))
+
         payload = {"schema_version": 1, "gates": entries}
 
     out = synthesis_path(sg, "validated.json")
