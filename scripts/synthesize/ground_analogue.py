@@ -202,8 +202,9 @@ _WRAPPER_IGNORE_HEADS = frozenset({
 # vars and bare $VAR are not covered — rare in the CI wrapper patterns targeted.
 _PREFIX_SUB_RE = re.compile(r"^\$\{[A-Z_]+\}")
 
-# Matches `--fail-under=N` token used by `coverage report` / `pytest --cov-fail-under`.
-_FAIL_UNDER_RE = re.compile(r"--fail-under=(\d+)")
+# Matches `--fail-under=N` (coverage report) and `--cov-fail-under=N` (pytest-cov);
+# `=` or space separator. Integer thresholds only.
+_FAIL_UNDER_RE = re.compile(r"--(?:cov-)?fail-under[= ](\d+)")
 
 
 def _extract_fail_under(cmd: str) -> int | None:

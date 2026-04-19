@@ -539,3 +539,35 @@ def test_coverage_threshold_from_wrapper_script(tmp_path):
     thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
     assert len(thresholds) == 1
     assert thresholds[0].command == "coverage_threshold=90"
+
+
+def test_coverage_threshold_from_pytest_cov_flag(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("")
+    wf_dir = tmp_path / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "ci.yml").write_text(
+        "jobs:\n"
+        "  t:\n"
+        "    steps:\n"
+        "      - run: pytest --cov=src --cov-fail-under=80\n"
+    )
+    obs = extract_observations(tmp_path)
+    thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
+    assert len(thresholds) == 1
+    assert thresholds[0].command == "coverage_threshold=80"
+
+
+def test_coverage_threshold_space_separated(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("")
+    wf_dir = tmp_path / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "ci.yml").write_text(
+        "jobs:\n"
+        "  t:\n"
+        "    steps:\n"
+        "      - run: coverage report --fail-under 75\n"
+    )
+    obs = extract_observations(tmp_path)
+    thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
+    assert len(thresholds) == 1
+    assert thresholds[0].command == "coverage_threshold=75"
