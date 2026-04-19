@@ -114,6 +114,9 @@ def _gate_run_command(gate: dict, project: Path) -> GateResult:
         err = (exc.stderr or b"").decode("utf-8", errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
         return GateResult(gate["id"], False, out, err,
                           f"gate timed out after {timeout}s — check for infinite loops or hung I/O")
+    except (FileNotFoundError, OSError) as exc:
+        return GateResult(gate["id"], False, "", str(exc),
+                          f"command not found: {cmd[0]!r} — check PATH or command spelling")
     passed = code == expect_exit
     hint = "" if passed else f"exit={code}, expected {expect_exit}"
     return GateResult(gate["id"], passed, out, err, hint)
