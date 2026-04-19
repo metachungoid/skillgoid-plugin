@@ -109,13 +109,15 @@ Create a synthetic `.skillgoid/` in `tmp_path` containing:
 - `chunks.yaml` with 3 chunks (A, B, C)
 - `criteria.yaml` with `language: python` and basic gates
 - `iterations/chunk-a-001.json` — `exit_reason: success`
-- `iterations/chunk-b-001.json` — `exit_reason: budget_exhausted`
-- `iterations/chunk-b-002.json` — `exit_reason: budget_exhausted`
+- `iterations/chunk-b-001.json` — `exit_reason: in_progress` (first attempt, gates failing, budget remains)
+- `iterations/chunk-b-002.json` — `exit_reason: budget_exhausted` (N=2 ≥ max_attempts=2, terminal)
+
+This matches SKILL.md exit logic: only the terminal iteration of a budget-exhausted chunk writes `budget_exhausted`; prior iterations stay `in_progress`.
 
 Run `metrics_append.py --skillgoid-dir <tmp> --slug test-partial`. Assert:
 - Exit 0
 - Appended JSON line has `outcome: "partial"` (not `"success"`)
-- `budget_exhausted_count: 1` (chunk B hit budget)
+- `budget_exhausted_count: 1` (one iteration terminated by budget)
 - `stall_count: 0`
 
 This is the first unit test for the retrospect-only code path (H9 was never triggered in the stress run).
