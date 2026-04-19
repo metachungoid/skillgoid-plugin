@@ -60,12 +60,37 @@ If no analogues are provided as args, the skill interactively prompts for at lea
 
    Capture the subagent's final text output as `subagent_stdout`.
 
-6. **Run Stage 2 (parse + validate).** Shell out:
+6. **Run Stage 2 (parse + validate), with one auto-retry.**
+
+   **Attempt 1.** Shell out:
    ```bash
    echo "$subagent_stdout" | python <plugin-root>/scripts/synthesize/synthesize.py \
      --skillgoid-dir .skillgoid
    ```
-   If the parser exits non-zero, surface its stderr (which names the violated rule) and STOP. Do not retry the subagent in Phase 1 — surface the failure so the user can re-run or hand-author. Phase 2 will add a single auto-retry.
+   On exit 0, proceed to step 7. On exit 1, capture the parser's stderr as `attempt1_stderr` and proceed to Attempt 2.
+
+   **Attempt 2.** Re-dispatch the synthesis subagent with the **same** Agent-tool invocation as step 5, but append this block to the end of the `prompt` string (after the two `<attachment>` blocks):
+
+   > Your previous output failed Stage 2 validation with:
+   > ```
+   > {attempt1_stderr}
+   > ```
+   > Re-emit the drafts JSON with this problem fixed. Do not include any prose — only valid JSON.
+
+   Capture the retry's final text output as `retry_stdout`. Shell out:
+   ```bash
+   echo "$retry_stdout" | python <plugin-root>/scripts/synthesize/synthesize.py \
+     --skillgoid-dir .skillgoid
+   ```
+   On exit 0, proceed to step 7 (the retry is the canonical drafts.json). On exit 1, capture stderr as `attempt2_stderr`, surface both messages to the user, and STOP:
+
+   > Synthesis subagent failed Stage 2 validation twice. Re-run the skill or hand-author `.skillgoid/criteria.yaml`.
+   >
+   > Attempt 1 stderr:
+   > {attempt1_stderr}
+   >
+   > Attempt 2 stderr:
+   > {attempt2_stderr}
 
 7. **Run Stage 3 (validate).** Shell out:
    ```bash
@@ -103,7 +128,8 @@ On failure: a single error line on stderr naming the failed stage. Partial artif
 ## Phase 1 / 2 progress
 
 - **v0.11 (current)**: Oracle validates analogue-cited gates. Every rendered gate carries a `validated: oracle | smoke-only | none` label derived from running the adapter against the analogue's cache-dir and an empty scaffold.
-- **Remaining Phase 2 work (v0.13/v0.14)**: context7 grounding; curated template fallback for cold-start projects; oracle for context7/template-sourced gates; subagent auto-retry on Stage 2 validation failure.
+- **Remaining Phase 2 work (v0.13/v0.14)**: context7 grounding; curated template fallback for cold-start projects; oracle for context7/template-sourced gates.
+- **v0.11.1**: one auto-retry on Stage 2 validation failure. If the subagent emits invalid drafts, the skill re-dispatches once with the rejection reason appended, then STOPs if the retry also fails.
 
 ## Risks
 
