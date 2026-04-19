@@ -226,3 +226,23 @@ def test_extract_observations_emits_from_pyproject_tool_sections(tmp_path):
     # Context names the section
     for o in pyproject_obs:
         assert "pyproject.toml" in o.context
+
+
+def test_extract_observations_pyproject_wins_over_workflow_on_dedup(tmp_path):
+    # A workflow step that emits the same (command, type) pair as the
+    # pyproject observation — the pyproject observation must win.
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "pyproject.toml").write_text("[tool.ruff.lint]\nselect = ['E']\n")
+    wf_dir = repo / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "ci.yml").write_text(
+        "name: ci\non: [push]\njobs:\n"
+        "  test:\n    runs-on: ubuntu-latest\n"
+        "    steps:\n      - run: ruff check .\n"
+    )
+    obs = extract_observations(repo)
+    ruff_obs = [o for o in obs if o.observed_type == "ruff"]
+    assert len(ruff_obs) == 1
+    assert "pyproject.toml#tool.ruff.lint" in ruff_obs[0].ref
+    assert "workflows" not in ruff_obs[0].ref

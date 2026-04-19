@@ -187,7 +187,10 @@ def extract_observations(repo: Path) -> list[Observation]:
             observed_type="pytest",
         ))
 
-    # Source 1b: pyproject.toml tool sections (pytest-testpaths-independent)
+    # Source 1b: pyproject.toml tool sections (pytest-testpaths-independent).
+    # Intentionally emitted BEFORE Source 2 so a config-grounded observation
+    # wins on (command, observed_type) dedup over a workflow-step observation
+    # with the same command+type.
     for tool, command, section in parse_pyproject_tool_sections(
         repo / "pyproject.toml"
     ):
