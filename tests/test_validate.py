@@ -112,3 +112,45 @@ def test_classify_fail_on_should_pass_labels_none(tmp_path):
     assert payload["gates"][0]["validated"] == "none"
     assert "should-pass failed" in payload["gates"][0]["warn"]
     assert "ModuleNotFoundError" in payload["gates"][0]["warn"]
+
+
+def test_coverage_oracle_pass_when_analogue_produced_number(tmp_path):
+    drafts = [{"id": "cov", "type": "coverage", "min_percent": 100,
+               "provenance": {"source": "analogue", "ref": "demo/pyproject.toml"}}]
+    analogue = tmp_path / "demo"
+    analogue.mkdir()
+    sg = _make_sg(tmp_path, drafts, analogues={"demo": str(analogue)})
+
+    def _run_gates(criteria, project):
+        if project == analogue:
+            return {"passed": False,  # failed because 93.8 < 100
+                    "results": [_gate_result(passed=False, stdout="coverage: 93.8%")]}
+        return {"passed": False,
+                "results": [_gate_result(passed=False,
+                    hint="coverage report not generated — is pytest-cov installed?")]}
+
+    with mock.patch("scripts.synthesize.validate.run_gates", _run_gates):
+        out = run_validate(sg, skip=False)
+
+    payload = json.loads(out.read_text())
+    assert payload["gates"][0]["validated"] == "oracle"
+
+
+def test_coverage_oracle_none_when_pytest_cov_unavailable(tmp_path):
+    drafts = [{"id": "cov", "type": "coverage", "min_percent": 80,
+               "provenance": {"source": "analogue", "ref": "demo/pyproject.toml"}}]
+    analogue = tmp_path / "demo"
+    analogue.mkdir()
+    sg = _make_sg(tmp_path, drafts, analogues={"demo": str(analogue)})
+
+    def _run_gates(criteria, project):
+        return {"passed": False,
+                "results": [_gate_result(passed=False, stdout="",
+                    hint="coverage report not generated — is pytest-cov installed?")]}
+
+    with mock.patch("scripts.synthesize.validate.run_gates", _run_gates):
+        out = run_validate(sg, skip=False)
+
+    payload = json.loads(out.read_text())
+    assert payload["gates"][0]["validated"] == "none"
+    assert "coverage tooling not exerciseable" in payload["gates"][0]["warn"]

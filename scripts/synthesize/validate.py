@@ -71,12 +71,45 @@ def _truncate(text: str, limit: int = 200) -> str:
     return text[:limit] + "..."
 
 
+def _coverage_produced_number(adapter_result: dict) -> bool:
+    """True iff the adapter's stdout includes a coverage percentage.
+
+    measure_python._gate_coverage writes `coverage: <pct>%` to stdout on
+    any successful run (even one that failed the min_percent threshold).
+    The stdout stays empty when pytest-cov isn't installed / errors early.
+    """
+    stdout = adapter_result["results"][0].get("stdout") or ""
+    return "coverage:" in stdout and "%" in stdout
+
+
+def _classify_coverage(gate_id: str, should_pass: dict, should_fail: dict) -> dict:
+    sp_produced = _coverage_produced_number(should_pass)
+    sf_produced = _coverage_produced_number(should_fail)
+
+    if sp_produced and not sf_produced:
+        return {"id": gate_id, "validated": "oracle", "warn": None,
+                "oracle_run": {"should_pass": {"passed": True},
+                               "should_fail": {"passed": False}}}
+    if sp_produced and sf_produced:
+        return {"id": gate_id, "validated": "smoke-only",
+                "warn": "scaffold also produced coverage; scaffold may be leaking code",
+                "oracle_run": {"should_pass": {"passed": True},
+                               "should_fail": {"passed": True}}}
+    return {"id": gate_id, "validated": "none",
+            "warn": "coverage tooling not exerciseable on analogue",
+            "oracle_run": {"should_pass": {"passed": False}, "should_fail": None}}
+
+
 def _classify(
     gate_id: str,
+    gate_type: str,
     should_pass: dict,
     should_fail: dict,
 ) -> dict:
     """Map (should_pass, should_fail) adapter results to a validated.json entry."""
+    if gate_type == "coverage":
+        return _classify_coverage(gate_id, should_pass, should_fail)
+
     sp_passed = should_pass["results"][0]["passed"]
     sf_passed = should_fail["results"][0]["passed"]
 
@@ -130,7 +163,7 @@ def _oracle_one_gate(draft: dict, analogues_map: dict[str, str]) -> dict:
                 "warn": f"should-fail internal error: {_truncate(str(exc))}",
                 "oracle_run": None}
 
-    return _classify(gate_id, should_pass, should_fail)
+    return _classify(gate_id, gate_type, should_pass, should_fail)
 
 
 def run_validate(sg: Path, skip: bool = False, stage_timeout_sec: int = 600) -> Path:
