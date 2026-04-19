@@ -176,6 +176,8 @@ _WRAPPER_IGNORE_HEADS = frozenset({
     "[", "[[", "exit",
 })
 
+# Matches ${UPPER_VAR} prefix substitutions (e.g. ${PREFIX}pytest). Lowercase
+# vars and bare $VAR are not covered — rare in the CI wrapper patterns targeted.
 _PREFIX_SUB_RE = re.compile(r"^\$\{[A-Z_]+\}")
 
 
@@ -217,13 +219,17 @@ def follow_wrapper_script(script: Path, repo_root: Path) -> list[str]:
         # Strip leading `./` since that's still the same command.
         if stripped.startswith("./"):
             stripped = stripped[2:]
-        head = stripped.split()[0] if stripped.split() else ""
+        tokens = stripped.split()
+        # Peel leading KEY=VALUE inline-env tokens (e.g. `PYTHONPATH=src pytest`
+        # → classify `pytest`). A pure assignment line (no command) is skipped.
+        while tokens and "=" in tokens[0] and tokens[0].split("=", 1)[0].replace("_", "").isalnum():
+            tokens = tokens[1:]
+        if not tokens:
+            continue
+        head = tokens[0]
         if head in _WRAPPER_IGNORE_HEADS:
             continue
-        # Skip assignments (FOO=bar) — not a command.
-        if "=" in head and head.split("=", 1)[0].replace("_", "").isalnum():
-            continue
-        out.append(stripped)
+        out.append(" ".join(tokens))
     return out
 
 

@@ -317,6 +317,23 @@ def test_follow_wrapper_script_rejects_path_outside_repo(tmp_path):
     assert follow_wrapper_script(outside, repo) == []
 
 
+def test_follow_wrapper_script_inline_env_prefix(tmp_path):
+    # PYTHONPATH=src pytest and CI=1 ruff should emit the command, not be dropped.
+    # Compound case (FOO=a BAZ=b mypy) should peel both assignments.
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "scripts").mkdir()
+    script = repo / "scripts" / "test"
+    script.write_text(
+        "#!/bin/sh\n"
+        "PYTHONPATH=src pytest tests/\n"
+        "CI=1 ruff check .\n"
+        "FOO=a BAZ=b mypy .\n"
+    )
+    out = follow_wrapper_script(script, repo)
+    assert out == ["pytest tests/", "ruff check .", "mypy ."]
+
+
 def test_follow_wrapper_script_caps_at_100_lines(tmp_path):
     repo = tmp_path / "demo"
     repo.mkdir()
