@@ -463,3 +463,11 @@ def test_coverage_threshold_non_int_is_skipped(tmp_path):
     obs = extract_observations(tmp_path)
     thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
     assert thresholds == []
+
+
+def test_coverage_threshold_bool_is_skipped(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.coverage.report]\nfail_under = true\n"
+    )
+    obs = extract_observations(tmp_path)
+    assert [o for o in obs if o.observed_type == "coverage_threshold"] == []

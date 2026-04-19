@@ -37,7 +37,7 @@ class Observation:
     ref: str  # relative path within the repo (or repo-name-prefixed)
     command: str  # the observed command string
     context: str  # human-readable note about where this was observed
-    observed_type: str  # one of pytest|ruff|mypy|cli-command-runs|run-command|coverage
+    observed_type: str  # one of pytest|ruff|mypy|cli-command-runs|run-command|coverage|coverage_threshold
 
     def to_dict(self) -> dict[str, str]:
         return dataclasses.asdict(self)
