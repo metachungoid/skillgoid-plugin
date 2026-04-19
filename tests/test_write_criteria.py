@@ -85,6 +85,28 @@ def test_render_criteria_yaml_with_empty_drafts():
     assert parsed["gates"] == []
 
 
+def test_render_criteria_yaml_round_trips_through_safe_load_back():
+    """Regression: ensure the 2-space indent splice survives round-trip.
+
+    The per-gate splice loop assumes `safe_dump(indent=2)` so that prefixing
+    each line with 2 spaces yields valid YAML under `gates:`. If that
+    assumption ever drifts, `yaml.safe_load` would produce malformed gates
+    (e.g. merged keys or broken nesting). This test parses the rendered
+    output and confirms every gate dict round-trips key-for-key against the
+    input drafts (minus the stripped internal fields).
+    """
+    payload = _drafts_payload()
+    out = render_criteria_yaml(payload, language="python")
+    parsed = yaml.safe_load(out)
+    assert len(parsed["gates"]) == len(payload["drafts"])
+    for rendered_gate, original_draft in zip(parsed["gates"], payload["drafts"]):
+        expected = {
+            k: v for k, v in original_draft.items()
+            if k not in ("provenance", "rationale")
+        }
+        assert rendered_gate == expected
+
+
 def test_run_write_criteria_writes_proposed_file(tmp_path):
     sg = tmp_path / ".skillgoid"
     sg.mkdir()

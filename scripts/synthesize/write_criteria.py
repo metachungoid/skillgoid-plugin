@@ -82,28 +82,24 @@ def render_criteria_yaml(drafts_payload: dict, language: str) -> str:
     header_lines.append("# Review each gate below. Delete or edit as needed before running build.")
     header_lines.append("")
 
-    body_dict: dict = {"language": language, "gates": []}
-    body_dict["gates"] = [_gate_to_schema_dict(d) for d in drafts]
-    body_yaml = yaml.safe_dump(body_dict, sort_keys=False, default_flow_style=False)
-
-    if not drafts:
-        # Empty gates list — emit header + body without per-gate comments
-        return "\n".join(header_lines) + body_yaml
-
     # Splice per-gate comments above each gate entry. We re-render gates one
-    # at a time so each gets its provenance comment block.
+    # at a time so each gets its provenance comment block. For the empty
+    # case we simply emit `gates: []` with no per-gate loop iterations.
     out_lines: list[str] = list(header_lines)
     out_lines.append(f"language: {language}")
-    out_lines.append("gates:")
-    for draft in drafts:
-        out_lines.append(_gate_comment_block(draft))
-        gate_dict = _gate_to_schema_dict(draft)
-        gate_yaml = yaml.safe_dump(
-            [gate_dict], sort_keys=False, default_flow_style=False,
-        )
-        # safe_dump with a list emits "- key: val" lines; indent each by 2 spaces
-        for line in gate_yaml.splitlines():
-            out_lines.append(f"  {line}")
+    if drafts:
+        out_lines.append("gates:")
+        for draft in drafts:
+            out_lines.append(_gate_comment_block(draft))
+            gate_dict = _gate_to_schema_dict(draft)
+            gate_yaml = yaml.safe_dump(
+                [gate_dict], sort_keys=False, default_flow_style=False, indent=2,
+            )
+            # safe_dump with a list emits "- key: val" lines; indent each by 2 spaces
+            for line in gate_yaml.splitlines():
+                out_lines.append(f"  {line}")
+    else:
+        out_lines.append("gates: []")
     return "\n".join(out_lines) + "\n"
 
 
@@ -114,6 +110,7 @@ def run_write_criteria(sg: Path) -> Path:
         grounding = load_json(synthesis_path(sg, "grounding.json"))
         language = grounding.get("language_detected", "unknown")
     except FileNotFoundError:
+        sys.stderr.write("write_criteria: grounding.json missing, defaulting language=unknown\n")
         language = "unknown"
 
     rendered = render_criteria_yaml(drafts_payload, language=language)
