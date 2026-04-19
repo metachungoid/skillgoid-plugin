@@ -282,3 +282,46 @@ def test_parse_accepts_coverage_with_min_percent_only():
     assert drafts[0]["type"] == "coverage"
     assert drafts[0]["min_percent"] == 80
     assert "args" not in drafts[0]
+
+
+def test_parse_accepts_provenance_ref_as_list():
+    grounding = _grounding_payload()
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov",
+                "type": "coverage",
+                "min_percent": 80,
+                "provenance": {
+                    "source": "analogue",
+                    "ref": [
+                        "mini-flask-demo/pyproject.toml",
+                        "mini-flask-demo/.github/workflows/test.yml",
+                    ],
+                },
+                "rationale": "x",
+            }
+        ]
+    })
+    drafts = parse_subagent_output(raw, grounding)
+    assert isinstance(drafts[0]["provenance"]["ref"], list)
+
+
+def test_parse_rejects_list_ref_containing_unknown():
+    grounding = _grounding_payload()
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov",
+                "type": "coverage",
+                "min_percent": 80,
+                "provenance": {
+                    "source": "analogue",
+                    "ref": ["mini-flask-demo/pyproject.toml", "does/not/exist"],
+                },
+                "rationale": "x",
+            }
+        ]
+    })
+    with pytest.raises(DraftValidationError, match="provenance ref not found"):
+        parse_subagent_output(raw, grounding)

@@ -98,10 +98,16 @@ def parse_subagent_output(raw: str, grounding: dict) -> list[dict]:
         ref = provenance.get("ref")
         if not ref:
             raise DraftValidationError(f"draft '{gate_id}' provenance missing 'ref'")
-        if ref not in valid_refs:
-            raise DraftValidationError(
-                f"draft '{gate_id}' provenance ref not found in grounding: {ref}"
-            )
+        refs_to_check = ref if isinstance(ref, list) else [ref]
+        for r in refs_to_check:
+            if not isinstance(r, str):
+                raise DraftValidationError(
+                    f"draft '{gate_id}' provenance.ref entries must be strings (got {r!r})"
+                )
+            if r not in valid_refs:
+                raise DraftValidationError(
+                    f"draft '{gate_id}' provenance ref not found in grounding: {r}"
+                )
 
         if gate_type == "coverage":
             args = draft.get("args")
