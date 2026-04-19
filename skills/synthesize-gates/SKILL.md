@@ -24,7 +24,7 @@ Produces a draft `criteria.yaml` from observation of one or more analogue refere
 ## Inputs
 
 - One or more analogue repo references, each either:
-  - A git URL — the skill clones it (shallow, depth=1) into `.skillgoid/synthesis/analogues/<slug>/`.
+  - A git URL — `ground.py` shallow-clones it (depth=1) into `~/.cache/skillgoid/analogues/<slug>/`.
   - A local filesystem path — symlinked or referenced directly.
 - `.skillgoid/goal.md` — must already exist (run `/skillgoid:clarify` first if absent).
 
@@ -34,9 +34,8 @@ If no analogues are provided as args, the skill interactively prompts for at lea
 
 1. **Verify `.skillgoid/goal.md` exists.** If not, error: `"goal.md missing — run /skillgoid:clarify first."` Do not proceed.
 
-2. **Resolve analogue paths.**
-   - For each git URL arg: shallow-clone into `.skillgoid/synthesis/analogues/<slug>/` where `<slug>` is the URL's owner+repo (e.g., `pallets-flask` for `github.com/pallets/flask`). Skip clone if directory already exists.
-   - For each local path arg: verify the directory exists. Use the path as-is.
+2. **Collect analogue args.**
+   - Accept each arg as-is. `ground.py` detects URLs (http/https/git@/ssh/git/file) vs local paths and shallow-clones URL analogues into the user-global cache dir (`~/.cache/skillgoid/analogues/<slug>/` on Linux; overridable via `$XDG_CACHE_HOME`).
    - If zero analogues given on CLI, prompt the user: `"No analogue repo provided. Please give a URL or local path to a reference project: "`. Read one line, treat as a single analogue.
 
 3. **Run Stage 1 (grounding).** Shell out:
@@ -84,7 +83,7 @@ If no analogues are provided as args, the skill interactively prompts for at lea
 
 ## Output
 
-On success: `.skillgoid/criteria.yaml.proposed` is written. Existing `.skillgoid/criteria.yaml` is untouched. Per-stage artifacts are visible under `.skillgoid/synthesis/` (`grounding.json`, `drafts.json`) for debugging.
+On success: `.skillgoid/criteria.yaml.proposed` is written. Existing `.skillgoid/criteria.yaml` is untouched. Per-stage artifacts are visible under `.skillgoid/synthesis/` (`grounding.json`, `drafts.json`). Analogue clones live under the user-global cache dir, not the project.
 
 On failure: a single error line on stderr naming the failed stage. Partial artifacts under `.skillgoid/synthesis/` may remain — these are safe to inspect or delete.
 
@@ -98,6 +97,7 @@ followed one level deep). The remaining Phase 2 gaps:
 - No context7 grounding — only user-pointed analogues.
 - No curated template fallback for cold-start projects.
 - No retry on subagent output validation failure — re-run the skill if needed.
+- Analogue clones live in a user-global cache (`~/.cache/skillgoid/analogues/` by default, or `$XDG_CACHE_HOME/skillgoid/analogues/`). Project-local clones from earlier versions are migrated automatically on first run.
 
 Phase 2 (planned) addresses all four.
 
