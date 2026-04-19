@@ -90,6 +90,10 @@ On failure: a single error line on stderr naming the failed stage. Partial artif
 
 ## Phase 1 limitations (called out for users)
 
+Phase 1.5 addresses the grounding-depth gaps from the initial Phase 1
+(pyproject `[tool.*]` sections are now parsed; CI wrapper scripts are
+followed one level deep). The remaining Phase 2 gaps:
+
 - All gates are labeled `validated: none (Phase 1: oracle validation deferred)`. The user is the only validator.
 - No context7 grounding — only user-pointed analogues.
 - No curated template fallback for cold-start projects.
