@@ -19,6 +19,7 @@ SCRIPTS = ROOT / "scripts" / "synthesize"
 
 
 def _run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
+    kwargs.setdefault("timeout", 30)
     return subprocess.run(cmd, capture_output=True, text=True, **kwargs)
 
 
@@ -103,13 +104,12 @@ def test_full_pipeline_with_mocked_subagent(tmp_path):
         assert "rationale" not in gate
 
 
-def test_pipeline_stops_when_no_observations(tmp_path):
-    """Empty analogue -> grounding has 0 observations -> synthesize must NOT be invoked.
+def test_synthesize_rejects_draft_with_nonexistent_provenance_ref(tmp_path):
+    """When the subagent invents a draft citing a ref not in grounding.json,
+    synthesize.py exits 1 with 'provenance ref not found' in stderr.
 
-    This test verifies the precondition Stage 2 enforces. The skill prose is
-    expected to bail out before dispatch when grounding is empty; here we
-    simulate the edge by checking that synthesize.py rejects empty grounding
-    correctly when the subagent (hypothetically) returned drafts anyway.
+    The empty-repo setup ensures the only valid refs are zero, but the same
+    rejection applies regardless of grounding size.
     """
     sg = tmp_path / ".skillgoid"
     sg.mkdir()
