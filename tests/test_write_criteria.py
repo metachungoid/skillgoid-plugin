@@ -50,7 +50,8 @@ def _drafts_payload() -> dict:
 def test_render_criteria_yaml_includes_provenance_comments():
     out = render_criteria_yaml(_drafts_payload(), language="python")
     assert "# source: analogue, ref: mini-flask-demo/pyproject.toml" in out
-    assert "# validated: none (Phase 1: oracle validation deferred)" in out
+    assert "# validated: none" in out
+    assert "# warn: validation artifact missing" in out
     assert "id: pytest_main" in out
 
 
@@ -170,7 +171,7 @@ def test_gate_comment_block_renders_single_ref_as_inline():
         "min_percent": 80,
         "provenance": {"source": "analogue", "ref": "mini/pyproject.toml"},
     }
-    block = _gate_comment_block(draft)
+    block = _gate_comment_block(draft, None)
     assert "source: analogue, ref: mini/pyproject.toml" in block
     assert "refs:" not in block
 
@@ -186,8 +187,90 @@ def test_gate_comment_block_renders_list_ref_as_block():
             "ref": ["mini/pyproject.toml", "mini/.github/workflows/ci.yml"],
         },
     }
-    block = _gate_comment_block(draft)
+    block = _gate_comment_block(draft, None)
     assert "source: analogue" in block
     assert "refs:" in block
     assert "- mini/pyproject.toml" in block
     assert "- mini/.github/workflows/ci.yml" in block
+
+
+def test_write_renders_validated_oracle(tmp_path):
+    """When validated.json marks a gate as 'oracle', the yaml carries it."""
+    import json as _json
+    from scripts.synthesize.write_criteria import run_write_criteria
+
+    sg = tmp_path / ".skillgoid"
+    synthesis = sg / "synthesis"
+    synthesis.mkdir(parents=True)
+
+    (synthesis / "grounding.json").write_text(_json.dumps({
+        "language_detected": "python", "framework_detected": None,
+        "analogues": {"demo": str(tmp_path)}, "observations": [],
+    }))
+    (synthesis / "drafts.json").write_text(_json.dumps({"drafts": [
+        {"id": "ruff_check", "type": "ruff", "args": ["check", "."],
+         "provenance": {"source": "analogue", "ref": "demo/pyproject.toml"}}
+    ]}))
+    (synthesis / "validated.json").write_text(_json.dumps({
+        "schema_version": 1,
+        "gates": [{"id": "ruff_check", "validated": "oracle",
+                   "warn": None, "oracle_run": None}],
+    }))
+
+    out = run_write_criteria(sg)
+    text = out.read_text()
+    assert "# validated: oracle" in text
+    assert "# warn:" not in text
+
+
+def test_write_renders_warn_line_when_present(tmp_path):
+    import json as _json
+    from scripts.synthesize.write_criteria import run_write_criteria
+
+    sg = tmp_path / ".skillgoid"
+    synthesis = sg / "synthesis"
+    synthesis.mkdir(parents=True)
+
+    (synthesis / "grounding.json").write_text(_json.dumps({
+        "language_detected": "python", "framework_detected": None,
+        "analogues": {"demo": str(tmp_path)}, "observations": [],
+    }))
+    (synthesis / "drafts.json").write_text(_json.dumps({"drafts": [
+        {"id": "cov", "type": "coverage", "min_percent": 95,
+         "provenance": {"source": "analogue", "ref": "demo/x"}}
+    ]}))
+    (synthesis / "validated.json").write_text(_json.dumps({
+        "schema_version": 1,
+        "gates": [{"id": "cov", "validated": "none",
+                   "warn": "coverage tooling not exerciseable on analogue",
+                   "oracle_run": None}],
+    }))
+
+    out = run_write_criteria(sg)
+    text = out.read_text()
+    assert "# validated: none" in text
+    assert "# warn: coverage tooling not exerciseable" in text
+
+
+def test_write_without_validated_json_defaults_all_to_none(tmp_path):
+    import json as _json
+    from scripts.synthesize.write_criteria import run_write_criteria
+
+    sg = tmp_path / ".skillgoid"
+    synthesis = sg / "synthesis"
+    synthesis.mkdir(parents=True)
+
+    (synthesis / "grounding.json").write_text(_json.dumps({
+        "language_detected": "python", "framework_detected": None,
+        "analogues": {}, "observations": [],
+    }))
+    (synthesis / "drafts.json").write_text(_json.dumps({"drafts": [
+        {"id": "g", "type": "pytest", "args": ["tests"],
+         "provenance": {"source": "analogue", "ref": "x/y"}}
+    ]}))
+    # No validated.json
+
+    out = run_write_criteria(sg)
+    text = out.read_text()
+    assert "# validated: none" in text
+    assert "# warn: validation artifact missing" in text

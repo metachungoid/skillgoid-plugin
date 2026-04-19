@@ -5,14 +5,17 @@ Reads drafts.json and (optionally) grounding.json; produces criteria.yaml
 .proposed with provenance comment headers per gate. Output conforms to
 schemas/criteria.schema.json.
 
-Phase 1: every gate is labeled `validated: none (Phase 1: oracle
-validation deferred)`. Phase 2 will replace this with real oracle labels.
+Labels per gate are read from `.skillgoid/synthesis/validated.json` when
+present (written by Stage 3). When absent, every gate defaults to
+`validated: none, warn: validation artifact missing`.
 
 NEVER overwrites an existing criteria.yaml. Always writes to
 .skillgoid/criteria.yaml.proposed.
 
 Contract:
-    render_criteria_yaml(drafts: dict, language: str) -> str
+    render_criteria_yaml(
+        drafts: dict, language: str, validated_payload: dict | None = None,
+    ) -> str
     run_write_criteria(sg: Path) -> Path
 
 CLI:
@@ -33,9 +36,6 @@ if str(_ROOT) not in sys.path:
 
 from scripts.synthesize._common import load_json, synthesis_path  # noqa: E402
 
-# Phase 1 validation label (Phase 2 will switch this per-gate)
-PHASE1_VALIDATION_LABEL = "validated: none (Phase 1: oracle validation deferred)"
-
 # Internal-only fields stripped before YAML emission (not in criteria schema)
 INTERNAL_FIELDS = frozenset({"provenance", "rationale"})
 
@@ -45,7 +45,7 @@ def _gate_to_schema_dict(draft: dict) -> dict:
     return {k: v for k, v in draft.items() if k not in INTERNAL_FIELDS}
 
 
-def _gate_comment_block(draft: dict) -> str:
+def _gate_comment_block(draft: dict, validated_entry: dict | None) -> str:
     """Build the comment lines that precede a gate in the rendered YAML."""
     prov = draft.get("provenance") or {}
     source = prov.get("source", "unknown")
@@ -57,20 +57,39 @@ def _gate_comment_block(draft: dict) -> str:
             lines.append(f"  #   - {r}")
     else:
         lines.append(f"  # source: {source}, ref: {ref}")
-    lines.append(f"  # {PHASE1_VALIDATION_LABEL}")
+
+    if validated_entry is None:
+        label = "none"
+        warn = "validation artifact missing"
+    else:
+        label = validated_entry.get("validated", "none")
+        warn = validated_entry.get("warn")
+    lines.append(f"  # validated: {label}")
+    if warn:
+        lines.append(f"  # warn: {warn}")
+
     rationale = draft.get("rationale")
     if rationale:
         lines.append(f"  # rationale: {rationale}")
     return "\n".join(lines)
 
 
-def render_criteria_yaml(drafts_payload: dict, language: str) -> str:
+def render_criteria_yaml(
+    drafts_payload: dict,
+    language: str,
+    validated_payload: dict | None = None,
+) -> str:
     """Render drafts to a criteria.yaml string with provenance comments.
 
     The output is valid YAML and conforms to schemas/criteria.schema.json.
     """
     drafts = drafts_payload.get("drafts", [])
     today = dt.date.today().isoformat()
+
+    validated_by_id: dict[str, dict] = {}
+    if validated_payload:
+        for entry in validated_payload.get("gates", []):
+            validated_by_id[entry["id"]] = entry
 
     header_lines = [
         f"# Skillgoid criteria — synthesized {today} from:",
@@ -81,9 +100,15 @@ def render_criteria_yaml(drafts_payload: dict, language: str) -> str:
         for d in drafts:
             if (d.get("provenance") or {}).get("source") == src:
                 ref = (d.get("provenance") or {}).get("ref", "unknown")
+                if isinstance(ref, list):
+                    ref = ref[0]
                 header_lines.append(f"#   {src}: {ref}")
                 break
     header_lines.append("# Review each gate below. Delete or edit as needed before running build.")
+    header_lines.append(
+        "# A `validated: oracle` label means the gate discriminated the analogue "
+        "from an empty scaffold; it is not proof of correctness."
+    )
     header_lines.append("")
 
     # Splice per-gate comments above each gate entry. We re-render gates one
@@ -94,7 +119,8 @@ def render_criteria_yaml(drafts_payload: dict, language: str) -> str:
     if drafts:
         out_lines.append("gates:")
         for draft in drafts:
-            out_lines.append(_gate_comment_block(draft))
+            entry = validated_by_id.get(draft["id"])
+            out_lines.append(_gate_comment_block(draft, entry))
             gate_dict = _gate_to_schema_dict(draft)
             gate_yaml = yaml.safe_dump(
                 [gate_dict], sort_keys=False, default_flow_style=False, indent=2,
@@ -108,7 +134,7 @@ def render_criteria_yaml(drafts_payload: dict, language: str) -> str:
 
 
 def run_write_criteria(sg: Path) -> Path:
-    """Load drafts.json + grounding.json, write criteria.yaml.proposed."""
+    """Load drafts.json + grounding.json + (optional) validated.json, write criteria.yaml.proposed."""
     drafts_payload = load_json(synthesis_path(sg, "drafts.json"))
     try:
         grounding = load_json(synthesis_path(sg, "grounding.json"))
@@ -117,7 +143,14 @@ def run_write_criteria(sg: Path) -> Path:
         sys.stderr.write("write_criteria: grounding.json missing, defaulting language=unknown\n")
         language = "unknown"
 
-    rendered = render_criteria_yaml(drafts_payload, language=language)
+    try:
+        validated_payload = load_json(synthesis_path(sg, "validated.json"))
+    except FileNotFoundError:
+        validated_payload = None
+
+    rendered = render_criteria_yaml(
+        drafts_payload, language=language, validated_payload=validated_payload,
+    )
     out_path = sg / "criteria.yaml.proposed"
     out_path.write_text(rendered)
     return out_path

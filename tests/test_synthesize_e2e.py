@@ -100,7 +100,7 @@ def test_full_pipeline_with_mocked_subagent(tmp_path):
 
     # Provenance comments present
     assert "# source: analogue" in text
-    assert "Phase 1: oracle validation deferred" in text
+    assert "# validated: none" in text
 
     # Both gates rendered
     assert "id: pytest_main" in text
