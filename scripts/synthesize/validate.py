@@ -44,25 +44,25 @@ def _skip_payload(drafts: list[dict]) -> dict:
     }
 
 
-def _resolve_analogue_path(draft: dict, analogues_map: dict[str, str]) -> Path | None:
-    """Derive the analogue cache-dir for a draft from its first ref.
-
-    Returns None if the draft has no usable ref, the slug is missing from
-    the analogues map, or the mapped path doesn't exist on disk.
-    """
+def _resolve_analogue_path(
+    draft: dict, analogues_map: dict[str, str]
+) -> tuple[Path | None, str | None]:
+    """Return (path, None) on success or (None, warn_text) on failure."""
     prov = draft.get("provenance") or {}
     ref = prov.get("ref")
     if ref is None:
-        return None
+        return None, "draft has no provenance.ref"
     first = ref[0] if isinstance(ref, list) else ref
     if not isinstance(first, str) or "/" not in first:
-        return None
+        return None, f"provenance.ref has no slug-prefix: {first!r}"
     slug = first.split("/", 1)[0]
     path_str = analogues_map.get(slug)
     if path_str is None:
-        return None
+        return None, f"analogue slug '{slug}' not in grounding.json"
     p = Path(path_str)
-    return p if p.exists() else None
+    if not p.exists():
+        return None, f"analogue path missing on disk: {p}"
+    return p, None
 
 
 def _truncate(text: str, limit: int = 200) -> str:
@@ -136,10 +136,10 @@ def _oracle_one_gate(draft: dict, analogues_map: dict[str, str]) -> dict:
     gate_id = draft["id"]
     gate_type = draft.get("type")
 
-    analogue_path = _resolve_analogue_path(draft, analogues_map)
+    analogue_path, resolve_warn = _resolve_analogue_path(draft, analogues_map)
     if analogue_path is None:
         return {"id": gate_id, "validated": "none",
-                "warn": "no analogue on disk for this gate's ref",
+                "warn": resolve_warn,
                 "oracle_run": None}
 
     one_gate_criteria = {"gates": [{k: v for k, v in draft.items()

@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from scripts.synthesize.validate import run_validate
 
 
@@ -189,3 +191,51 @@ def test_stage_timeout_short_circuits_remaining_gates(tmp_path):
     assert "stage-timeout exceeded" in payload["gates"][1]["warn"]
     assert payload["gates"][2]["validated"] == "none"
     assert "stage-timeout exceeded" in payload["gates"][2]["warn"]
+
+
+def test_missing_grounding_json_errors_clearly(tmp_path):
+    sg = tmp_path / ".skillgoid"
+    synthesis = sg / "synthesis"
+    synthesis.mkdir(parents=True)
+    (synthesis / "drafts.json").write_text(json.dumps({"drafts": [
+        {"id": "g", "type": "pytest", "args": ["tests"],
+         "provenance": {"source": "analogue", "ref": "demo/x"}}
+    ]}))
+    # NOTE: no grounding.json
+
+    with pytest.raises(FileNotFoundError, match="grounding.json"):
+        run_validate(sg, skip=False)
+
+
+def test_unknown_slug_warns_clearly(tmp_path):
+    drafts = [{"id": "g", "type": "pytest", "args": ["tests"],
+               "provenance": {"source": "analogue", "ref": "other/pyproject.toml"}}]
+    sg = _make_sg(tmp_path, drafts, analogues={"demo": str(tmp_path)})
+
+    out = run_validate(sg, skip=False)
+    payload = json.loads(out.read_text())
+    assert payload["gates"][0]["validated"] == "none"
+    assert "analogue slug 'other' not in grounding.json" in payload["gates"][0]["warn"]
+
+
+def test_multi_ref_first_slug_is_picked(tmp_path):
+    drafts = [{"id": "cov", "type": "coverage", "min_percent": 90,
+               "provenance": {"source": "analogue", "ref": [
+                   "primary/pyproject.toml", "secondary/ci.yml"]}}]
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    sg = _make_sg(tmp_path, drafts, analogues={
+        "primary": str(primary), "secondary": str(tmp_path / "secondary")})
+
+    captured = {"project": None}
+
+    def _run_gates(criteria, project):
+        if captured["project"] is None:
+            captured["project"] = project
+        return {"passed": True, "results": [_gate_result(
+            passed=True, stdout="coverage: 95.0%")]}
+
+    with mock.patch("scripts.synthesize.validate.run_gates", _run_gates):
+        run_validate(sg, skip=False)
+
+    assert captured["project"] == primary
