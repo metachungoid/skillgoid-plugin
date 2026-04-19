@@ -208,9 +208,20 @@ Routes a user request through the Skillgoid pipeline:
 
 8. Invoke `skillgoid:retrospect` directly. Used when the user abandons or finalizes early.
 
-### Retrospect phase
+### Retrospect phase (auto-invoked on every terminal state since v0.12)
 
-9. Invoke `skillgoid:retrospect` once integration (if any) passes or is skipped.
+9. **Auto-retrospect trigger.** After every terminal state reached inside the `build "<goal>"` or `build resume` invocation modes — that is, after step 3f stops the wave on a `stalled` / `budget_exhausted` failure, after step 4h exits with integration still failing, OR after step 4f succeeds with integration passing — invoke `skillgoid:retrospect` exactly once before surfacing the final summary to the user.
+
+   **Skip conditions (do NOT auto-invoke retrospect):**
+   - Invocation mode is `build retrospect-only` (step 8 already invokes retrospect — avoids double-call).
+   - Invocation mode is `build status` (read-only subcommand, no loop ran, no terminal state).
+   - `.skillgoid/iterations/` is absent or empty (clarify/plan/feasibility phase aborted before any loop dispatch — nothing to retrospect on).
+
+   **Slug passed to `metrics_append.py`:** use `$(basename "$(pwd)")` (same convention as `/skillgoid:status`). This ensures a metrics line is written for every terminal run, not only the success path. `metrics.jsonl` is append-only — a subsequent `build resume` after an unstick will append a fresh line with the updated outcome; dedup-by-slug display is a v0.13+ concern.
+
+   **Outcome classification is unchanged:** `retrospect` delegates to `scripts/metrics_append.py`, which already returns `success` / `partial` / `abandoned` based on the iteration set (locked in by `tests/test_v10_bundle.py::test_h9_retrospect_only_partial_outcome` and v0.12's `tests/test_auto_retrospect_trigger.py`).
+
+10. Surface the final summary to the user (same content as before: what was built, where artifacts live, and for failure paths, the three-option recovery menu from step 3f or step 4h).
 
 ## Output
 
