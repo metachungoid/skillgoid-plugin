@@ -202,6 +202,17 @@ _WRAPPER_IGNORE_HEADS = frozenset({
 # vars and bare $VAR are not covered — rare in the CI wrapper patterns targeted.
 _PREFIX_SUB_RE = re.compile(r"^\$\{[A-Z_]+\}")
 
+# Matches `--fail-under=N` token used by `coverage report` / `pytest --cov-fail-under`.
+_FAIL_UNDER_RE = re.compile(r"--fail-under=(\d+)")
+
+
+def _extract_fail_under(cmd: str) -> int | None:
+    """Return int N if the command contains --fail-under=N, else None."""
+    match = _FAIL_UNDER_RE.search(cmd)
+    if match:
+        return int(match.group(1))
+    return None
+
 
 def follow_wrapper_script(script: Path, repo_root: Path) -> list[str]:
     """Read a shell wrapper script and return the real command strings in it.
@@ -339,6 +350,15 @@ def extract_observations(repo: Path) -> list[Observation]:
                             context=f"CI wrapper script (called from {wf.name})",
                             observed_type=inner_type,
                         ))
+                        threshold = _extract_fail_under(inner)
+                        if threshold is not None:
+                            observations.append(Observation(
+                                source="analogue",
+                                ref=wrapper_ref,
+                                command=f"coverage_threshold={threshold}",
+                                context="CI step declares --fail-under",
+                                observed_type="coverage_threshold",
+                            ))
                 else:
                     observations.append(Observation(
                         source="analogue",
@@ -347,6 +367,15 @@ def extract_observations(repo: Path) -> list[Observation]:
                         context="CI workflow step",
                         observed_type=otype,
                     ))
+                    threshold = _extract_fail_under(step_cmd)
+                    if threshold is not None:
+                        observations.append(Observation(
+                            source="analogue",
+                            ref=wf_ref,
+                            command=f"coverage_threshold={threshold}",
+                            context="CI step declares --fail-under",
+                            observed_type="coverage_threshold",
+                        ))
 
     # Dedup by (command, observed_type) — keep first occurrence
     seen: set[tuple[str, str]] = set()

@@ -471,3 +471,71 @@ def test_coverage_threshold_bool_is_skipped(tmp_path):
     )
     obs = extract_observations(tmp_path)
     assert [o for o in obs if o.observed_type == "coverage_threshold"] == []
+
+
+def test_coverage_threshold_from_workflow_fail_under(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("")
+    wf_dir = tmp_path / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "ci.yml").write_text(
+        "jobs:\n"
+        "  t:\n"
+        "    steps:\n"
+        "      - run: coverage report --fail-under=85\n"
+    )
+    obs = extract_observations(tmp_path)
+    thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
+    assert len(thresholds) == 1
+    t = thresholds[0]
+    assert t.command == "coverage_threshold=85"
+    assert t.ref.endswith("/.github/workflows/ci.yml")
+
+
+def test_coverage_threshold_two_sources_emits_two_observations(tmp_path):
+    # pyproject says 100, workflow says 95 — both recorded, subagent picks
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.coverage.report]\n"
+        "fail_under = 100\n"
+    )
+    wf_dir = tmp_path / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "ci.yml").write_text(
+        "jobs:\n"
+        "  t:\n"
+        "    steps:\n"
+        "      - run: coverage report --fail-under=95\n"
+    )
+    obs = extract_observations(tmp_path)
+    thresholds = sorted(
+        (o for o in obs if o.observed_type == "coverage_threshold"),
+        key=lambda o: o.command,
+    )
+    assert len(thresholds) == 2
+    assert thresholds[0].command == "coverage_threshold=100"
+    assert thresholds[1].command == "coverage_threshold=95"
+
+
+def test_coverage_threshold_from_wrapper_script(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("")
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    wrapper = scripts_dir / "test"
+    wrapper.write_text(
+        "#!/bin/sh\n"
+        "set -e\n"
+        "pytest\n"
+        "coverage report --fail-under=90\n"
+    )
+    wrapper.chmod(0o755)
+    wf_dir = tmp_path / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "ci.yml").write_text(
+        "jobs:\n"
+        "  t:\n"
+        "    steps:\n"
+        "      - run: ./scripts/test\n"
+    )
+    obs = extract_observations(tmp_path)
+    thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
+    assert len(thresholds) == 1
+    assert thresholds[0].command == "coverage_threshold=90"
