@@ -37,7 +37,7 @@ def test_suspect_identifies_lib_b_from_preseeded_failure(tmp_path):
     assert data["suspect_chunk_id"] == "lib_b", (
         f"expected lib_b, got {data['suspect_chunk_id']!r}. evidence: {data.get('evidence')}"
     )
-    assert data["confidence"] == "filename-match"
+    assert data["confidence"] == "filename-match", f"expected filename-match, got {data.get('confidence')!r}"
 
 
 def test_integration_gate_fails_before_fix(tmp_path):
@@ -106,7 +106,9 @@ def test_full_retry_cycle(tmp_path):
     )
     assert proc.returncode == 0
     suspect = json.loads(proc.stdout.strip())
-    assert suspect["suspect_chunk_id"] == "lib_b"
+    assert suspect["suspect_chunk_id"] == "lib_b", (
+        f"expected lib_b, got {suspect['suspect_chunk_id']!r}. evidence: {suspect.get('evidence')}"
+    )
 
     # Step 2: "Loop subagent" fixes the suspect chunk (Python string replace = the fix)
     lib_b = project / "src" / "lib_b.sh"
