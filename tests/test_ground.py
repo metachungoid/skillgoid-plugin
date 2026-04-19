@@ -242,3 +242,19 @@ def test_migrate_noop_when_no_legacy(tmp_path, monkeypatch):
     cache_root = tmp_path / "cache" / "skillgoid" / "analogues"
     if cache_root.exists():
         assert list(cache_root.iterdir()) == []
+
+
+def test_grounding_includes_analogues_map(tmp_path):
+    """grounding.json exposes a {slug: absolute_path} map for oracle validation."""
+    import json as _json
+    from scripts.synthesize.ground import run_ground
+
+    sg = tmp_path / ".skillgoid"
+    sg.mkdir()
+    fixture = Path(__file__).resolve().parents[0] / "fixtures" / "synthesize" / "mini-flask-demo"
+
+    run_ground(sg, [fixture])
+    payload = _json.loads((sg / "synthesis" / "grounding.json").read_text())
+
+    assert "analogues" in payload
+    assert payload["analogues"]["mini-flask-demo"] == str(fixture.resolve())

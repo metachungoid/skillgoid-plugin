@@ -153,9 +153,23 @@ def run_ground(sg: Path, analogues: list) -> Path:
         for obs in extract_observations(repo):
             observations.append(obs.to_dict())
 
+    analogues_map: dict[str, str] = {}
+    for arg in analogues:
+        arg_str = str(arg)
+        if _is_url(arg_str):
+            slug = _slug_for_url(arg_str)
+            repo_path = _cache_dir() / slug
+        else:
+            p = Path(arg_str)
+            slug = p.name
+            repo_path = p
+        if repo_path.exists():
+            analogues_map[slug] = str(repo_path.resolve())
+
     payload = {
         "language_detected": language,
         "framework_detected": None,  # Phase 2: populated by ground_context7
+        "analogues": analogues_map,
         "observations": observations,
     }
 
