@@ -223,6 +223,27 @@ def test_parse_rejects_coverage_with_args():
         parse_subagent_output(raw, grounding)
 
 
+def test_parse_rejects_coverage_with_empty_args():
+    grounding = _grounding_payload()
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov",
+                "type": "coverage",
+                "args": [],
+                "min_percent": 80,
+                "provenance": {
+                    "source": "analogue",
+                    "ref": "mini-flask-demo/pyproject.toml",
+                },
+                "rationale": "x",
+            }
+        ]
+    })
+    with pytest.raises(DraftValidationError, match=r"draft 'cov' \(coverage\): must not have args"):
+        parse_subagent_output(raw, grounding)
+
+
 def test_parse_rejects_coverage_without_min_percent():
     grounding = _grounding_payload()
     raw = json.dumps({

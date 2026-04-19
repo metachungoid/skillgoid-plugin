@@ -165,8 +165,7 @@ def parse_subagent_output(raw: str, grounding: dict) -> list[dict]:
                 )
 
         if gate_type == "coverage":
-            args = draft.get("args")
-            if args is not None and len(args) > 0:  # empty list is treated as absent
+            if "args" in draft:
                 raise DraftValidationError(
                     f"draft '{gate_id}' (coverage): must not have args; "
                     f"use type: run-command for literal CLI usage"
