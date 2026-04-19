@@ -344,3 +344,72 @@ def test_follow_wrapper_script_caps_at_100_lines(tmp_path):
     out = follow_wrapper_script(script, repo)
     # 100-line cap includes the shebang line
     assert len(out) <= 100
+
+
+def test_extract_observations_follows_wrapper_scripts(tmp_path):
+    repo = tmp_path / "demo"
+    repo.mkdir()
+
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / "test").write_text(
+        "#!/bin/sh\n"
+        "pytest tests/\n"
+        "ruff check .\n"
+    )
+
+    wf_dir = repo / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "ci.yml").write_text(
+        "name: ci\n"
+        "on: [push]\n"
+        "jobs:\n"
+        "  test:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - run: scripts/test\n"
+    )
+
+    obs = extract_observations(repo)
+    types_seen = [o.observed_type for o in obs]
+
+    assert "pytest" in types_seen
+    assert "ruff" in types_seen
+
+    pytest_obs = [o for o in obs if o.observed_type == "pytest"]
+    assert any(o.ref.endswith("scripts/test") for o in pytest_obs)
+
+    wrapper_obs = [o for o in obs if "wrapper" in o.context.lower()]
+    assert wrapper_obs, "expected at least one wrapper-derived observation"
+
+
+def test_extract_observations_wrapper_follow_is_one_level_deep(tmp_path):
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "scripts").mkdir()
+    (repo / "scripts" / "test").write_text(
+        "#!/bin/sh\n"
+        "scripts/inner\n"
+    )
+    (repo / "scripts" / "inner").write_text(
+        "#!/bin/sh\n"
+        "pytest\n"
+    )
+    wf_dir = repo / ".github" / "workflows"
+    wf_dir.mkdir(parents=True)
+    (wf_dir / "ci.yml").write_text(
+        "name: ci\n"
+        "on: [push]\n"
+        "jobs:\n"
+        "  test:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - run: scripts/test\n"
+    )
+
+    obs = extract_observations(repo)
+    types_seen = [o.observed_type for o in obs]
+    # No pytest — scripts/inner is not followed (depth-1 only)
+    assert "pytest" not in types_seen
+    # scripts/inner is observed as a command head from depth-1 follow
+    commands = [o.command for o in obs]
+    assert any("scripts/inner" in c for c in commands)

@@ -268,7 +268,10 @@ def extract_observations(repo: Path) -> list[Observation]:
             observed_type=tool,
         ))
 
-    # Source 2: GitHub Actions workflow run-steps
+    # Source 2: GitHub Actions workflow run-steps.
+    # For each step, classify the command. If the head resolves to a file
+    # inside the repo (a wrapper script), follow it one level and emit
+    # observations for each command we find, with refs pointing at the wrapper.
     workflows_dir = repo / ".github" / "workflows"
     if workflows_dir.exists():
         workflow_files = list(workflows_dir.glob("*.yml")) + list(
@@ -279,13 +282,38 @@ def extract_observations(repo: Path) -> list[Observation]:
                 otype = _classify_command(step_cmd)
                 if otype is None:
                     continue
-                observations.append(Observation(
-                    source="analogue",
-                    ref=f"{repo_name}/.github/workflows/{wf.name}",
-                    command=step_cmd,
-                    context="CI workflow step",
-                    observed_type=otype,
-                ))
+                wf_ref = f"{repo_name}/.github/workflows/{wf.name}"
+
+                head = step_cmd.strip().split()[0] if step_cmd.strip() else ""
+                candidate = head[2:] if head.startswith("./") else head
+                candidate_path = repo / candidate
+                wrapper_cmds = (
+                    follow_wrapper_script(candidate_path, repo)
+                    if candidate and candidate_path.is_file()
+                    else []
+                )
+
+                if wrapper_cmds:
+                    wrapper_ref = f"{repo_name}/{candidate}"
+                    for inner in wrapper_cmds:
+                        inner_type = _classify_command(inner)
+                        if inner_type is None:
+                            continue
+                        observations.append(Observation(
+                            source="analogue",
+                            ref=wrapper_ref,
+                            command=inner,
+                            context=f"CI wrapper script (called from {wf.name})",
+                            observed_type=inner_type,
+                        ))
+                else:
+                    observations.append(Observation(
+                        source="analogue",
+                        ref=wf_ref,
+                        command=step_cmd,
+                        context="CI workflow step",
+                        observed_type=otype,
+                    ))
 
     # Dedup by (command, observed_type) — keep first occurrence
     seen: set[tuple[str, str]] = set()
