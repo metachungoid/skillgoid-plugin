@@ -219,7 +219,7 @@ def test_parse_rejects_coverage_with_args():
             }
         ]
     })
-    with pytest.raises(DraftValidationError, match="coverage gate 'cov' must not have args"):
+    with pytest.raises(DraftValidationError, match=r"draft 'cov' \(coverage\): must not have args"):
         parse_subagent_output(raw, grounding)
 
 
@@ -238,7 +238,7 @@ def test_parse_rejects_coverage_without_min_percent():
             }
         ]
     })
-    with pytest.raises(DraftValidationError, match="coverage gate 'cov' must have min_percent"):
+    with pytest.raises(DraftValidationError, match=r"draft 'cov' \(coverage\): must have min_percent"):
         parse_subagent_output(raw, grounding)
 
 
@@ -258,7 +258,7 @@ def test_parse_rejects_coverage_min_percent_out_of_range():
             }
         ]
     })
-    with pytest.raises(DraftValidationError, match="min_percent must be 0-100"):
+    with pytest.raises(DraftValidationError, match=r"draft 'cov' \(coverage\): min_percent must be 0-100"):
         parse_subagent_output(raw, grounding)
 
 
