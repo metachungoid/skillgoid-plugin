@@ -186,13 +186,12 @@ Routes a user request through the Skillgoid pipeline:
       - **Re-dispatch the suspect chunk's loop subagent** (exactly as in step 3c) with extra injected context: a new field `integration_failure_context` in the chunk prompt describing the integration-gate failure (which gate failed, hint, stderr prefix). The loop subagent should interpret this as "your chunk's per-chunk gates pass, but the full system fails at X — fix your chunk to address X."
       - After the chunk subagent returns (with a fresh `success` / `stalled` / `budget_exhausted`), increment `attempt` and return to step 4d to re-run the integration subagent.
 
-   4h. **If `gate_report.passed == false` and attempts exhausted**: Surface to the user. Do NOT auto-invoke retrospect. Print:
+   4h. **If `gate_report.passed == false` and attempts exhausted**: integration failed after all retries. Proceed to step 9 (auto-retrospect trigger). The final summary surfaced to the user by step 10 is:
       ```
       Integration failed after <N> attempts. See .skillgoid/integration/*.json
       for reports. Run /skillgoid:build retrospect-only to finalize this
       project as-is, or debug manually and re-run.
       ```
-      Stop.
 
 ### Dispatch — Resume (`subcommand == "resume"` or default when `.skillgoid/` exists)
 
