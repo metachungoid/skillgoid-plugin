@@ -928,3 +928,40 @@ Explicitly not addressed here; tracked for the Phase 2 plan:
 4. **Oracle validation** — actually execute gates in a sandbox to assign `validated: clean | noisy | broken` per-gate.
 5. **Auto-retry on subagent output parse failure** — single retry with the parse error message in context.
 6. **Generalize language-detect across analogues** — current "first-non-unknown wins" policy is OK for one analogue, noisy for mixed repos.
+
+---
+
+## Dogfood 2 result (2026-04-19)
+
+Re-ran Stage 1 + 2 + 4 against `encode/httpx` with the same URL-shortener goal used in the Phase 1 dogfood.
+
+**Grounding comparison:**
+
+| | Phase 1 | Phase 1.5 |
+|---|---|---|
+| Total observations | 6 | 24 (pre-dedup by ground.py; 9 surfaced) |
+| Observations typed `run-command` only | 6 (100 %) | ~8 noisy ones from install/build/publish wrappers |
+| Typed pytest/ruff/mypy/coverage | 0 | 4 (all from pyproject `[tool.*]`) + more from wrapper follow |
+| Refs pointing to pyproject tool sections | 0 | 4 |
+| Refs pointing to wrapper scripts | 0 | 5 (scripts/install, build, publish, check, test, coverage) |
+
+**Synthesized drafts comparison:**
+
+| | Phase 1 | Phase 1.5 |
+|---|---|---|
+| Total drafts | 4 | 6 |
+| Invented `cli-command-runs` (from goal only) | 2 | 0 |
+| Drafts citing pyproject refs | 0 | 3 (ruff, mypy, pytest) |
+| Drafts citing wrapper-script refs | 0 | 3 (scripts/check, scripts/test, scripts/coverage) |
+| Type-laundering from `run-command` | 2 (pytest, ruff inferred from wrapper name) | 0 |
+
+**Wins:**
+- Zero type-laundering. All typed gates are grounded in pyproject config or wrapper-script content.
+- Zero invented `cli-command-runs`. Without a wrapper-observed `cli-command-runs` pattern, the subagent correctly omits it.
+- ruff, mypy, coverage observations now cite `pyproject.toml#tool.*` refs — the clearest possible provenance.
+
+**Remaining Phase 2 concern:**
+- `coverage-report --fail-under=100` is appropriate for httpx's high test-quality bar but may be too strict for a fresh project. This is a semantic-provenance problem (the constraint transfers without adjustment). Phase 2's oracle validation would catch this by running the gate against the user's nascent project and observing failure.
+- The subagent output wrapped JSON in markdown fences (not valid protocol). This is a subagent prompt-compliance issue; synthesize.py currently requires clean stdout. Phase 2 should add a strip-fences fallback in parse_subagent_output.
+
+**Conclusion:** Phase 1.5 closes the grounding-depth gap that caused Phase 1's type-laundering. The pipeline is ready for Phase 2 (oracle validation + context7 + templates).
