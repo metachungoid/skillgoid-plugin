@@ -83,6 +83,21 @@ Routes a user request through the Skillgoid pipeline:
 
    3e. Parse each subagent's JSON response and accumulate into orchestration state.
 
+   3e-verify. **Verify each dispatched chunk wrote its iteration file.** For every chunk dispatched in this wave (excluding resume-skipped chunks from step 3a), immediately invoke:
+
+      ```bash
+      python <plugin-root>/scripts/verify_iteration_written.py \
+        --chunk-id <chunk_id> \
+        --skillgoid-dir .skillgoid
+      ```
+
+      If any invocation exits non-zero, halt the wave **before** the gate check (3f). Surface to the user:
+      - Each chunk that failed to produce a valid iteration file
+      - The reason from the script's JSON output (`reason` field)
+      - The corresponding subagent's final response text (for manual reconstruction)
+
+      Do not proceed to step 3f, subsequent waves, or integration until the iteration file(s) are written or the user intervenes. This is a distinct failure surface from the stall/budget recovery menu in 3f — a missing iteration file means the subagent never declared an `exit_reason` at all.
+
    3f. **Wave gate check**, evaluated after ALL subagents in the wave report:
       - If every chunk in the wave exited `success`: proceed to the next wave.
       - If any chunk exited `budget_exhausted` or `stalled`: STOP. Do NOT dispatch subsequent waves. Surface ALL failures (possibly multiple siblings) to the user with the three-option recovery menu:
@@ -159,7 +174,15 @@ Routes a user request through the Skillgoid pipeline:
 
    4g. **If `gate_report.passed == false` and `attempt < integration_retries + 1`**: auto-repair path.
 
-      - **Identify suspect chunk(s).** For each failing gate, grep its `stderr` and `stdout` for filenames that appear in the chunks' blueprint/impl paths. Pick the chunk whose file is most recently mentioned. If no filename match, ask the user which chunk to retry.
+      - **Identify suspect chunk.** Invoke:
+
+        ```bash
+        python <plugin-root>/scripts/integration_suspect.py \
+          --gate-report .skillgoid/integration/<attempt>.json \
+          --chunks     .skillgoid/chunks.yaml
+        ```
+
+        Parse `suspect_chunk_id` from the stdout JSON. If non-null, proceed to re-dispatch that chunk's loop subagent with the `integration_failure_context` slot populated. If null (no deterministic path match), ask the user which chunk to retry — the script's `evidence` field explains what it searched.
       - **Re-dispatch the suspect chunk's loop subagent** (exactly as in step 3c) with extra injected context: a new field `integration_failure_context` in the chunk prompt describing the integration-gate failure (which gate failed, hint, stderr prefix). The loop subagent should interpret this as "your chunk's per-chunk gates pass, but the full system fails at X — fix your chunk to address X."
       - After the chunk subagent returns (with a fresh `success` / `stalled` / `budget_exhausted`), increment `attempt` and return to step 4d to re-run the integration subagent.
 
