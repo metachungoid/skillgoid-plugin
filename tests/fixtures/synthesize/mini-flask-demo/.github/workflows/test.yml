@@ -10,3 +10,4 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: pytest -v
+      - run: coverage report --fail-under=95
