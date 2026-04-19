@@ -22,3 +22,25 @@ def test_skill_documents_validate_only_flag():
 def test_skill_phase2_limitations_reflect_v011_oracle():
     text = SKILL.read_text()
     assert "v0.11" in text or "oracle validates" in text
+
+
+def test_skill_documents_stage2_retry_prompt():
+    text = SKILL.read_text()
+    assert "Your previous output failed Stage 2 validation" in text, (
+        "SKILL.md step 6 must instruct the retry to surface the Stage 2 stderr "
+        "to the subagent. See v0.11.1 spec."
+    )
+
+
+def test_skill_documents_retry_stop_condition():
+    text = SKILL.read_text()
+    assert "failed Stage 2 validation twice" in text, (
+        "SKILL.md step 6 must document the STOP condition after two failed attempts."
+    )
+
+
+def test_skill_removes_stale_phase1_no_retry_text():
+    text = SKILL.read_text()
+    assert "Phase 2 will add a single auto-retry" not in text, (
+        "Stale pre-v0.11.1 note must be removed when retry ships."
+    )
