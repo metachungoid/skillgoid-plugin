@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -40,8 +41,9 @@ def _cache_dir() -> Path:
     """Return the user-global cache dir for analogue clones.
 
     Prefers $XDG_CACHE_HOME/skillgoid/analogues, falls back to
-    ~/.cache/skillgoid/analogues. If both are unwritable, falls back to
-    $TMPDIR/skillgoid-analogues and emits a stderr warning.
+    ~/.cache/skillgoid/analogues. If the primary is unwritable, falls back
+    to a tempdir-based location ($TMPDIR on POSIX, or Python's
+    tempfile.gettempdir() otherwise) and emits a stderr warning.
     """
     xdg = os.environ.get("XDG_CACHE_HOME")
     base = Path(xdg) if xdg else Path.home() / ".cache"
@@ -59,14 +61,61 @@ def _cache_dir() -> Path:
         return fallback
 
 
-def run_ground(sg: Path, analogues: list[Path]) -> Path:
-    """Run all available grounding sources, write grounding.json, return path."""
+_URL_PREFIX_RE = re.compile(r"^(https?://|git@|ssh://|git://|file://)")
+_SLUG_TAIL_RE = re.compile(r"([^/:]+)[/:]([^/:]+?)(?:\.git)?/?$")
+
+
+def _is_url(arg: str) -> bool:
+    """Return True if arg looks like a git URL, False if it's a local path."""
+    return bool(_URL_PREFIX_RE.match(arg))
+
+
+def _slug_for_url(url: str) -> str:
+    """Derive a stable <owner>-<repo> slug from a git URL.
+
+    For file:// URLs (no owner), returns the last path segment only.
+    """
+    if url.startswith("file://"):
+        path = url[len("file://"):]
+        name = Path(path).name
+        return name.removesuffix(".git")
+    match = _SLUG_TAIL_RE.search(url.rstrip("/"))
+    if match:
+        return f"{match.group(1)}-{match.group(2)}"
+    return url.rsplit("/", 1)[-1].removesuffix(".git")
+
+
+def run_ground(sg: Path, analogues: list) -> Path:
+    """Run all available grounding sources, write grounding.json, return path.
+
+    Each element of `analogues` may be a str (URL or path) or a Path. Git
+    URLs are shallow-cloned into _cache_dir()/<slug>/; local paths are used
+    in-place.
+    """
     ensure_synthesis_dir(sg)
 
     observations: list[dict] = []
     language = "unknown"
 
-    for repo in analogues:
+    for arg in analogues:
+        arg_str = str(arg)
+        if _is_url(arg_str):
+            slug = _slug_for_url(arg_str)
+            target = _cache_dir() / slug
+            if not target.exists():
+                import subprocess
+                sys.stderr.write(f"cloning {arg_str} -> {target}\n")
+                result = subprocess.run(
+                    ["git", "clone", "--depth=1", arg_str, str(target)],
+                    capture_output=True, text=True,
+                )
+                if result.returncode != 0:
+                    sys.stderr.write(f"clone failed for {arg_str}: {result.stderr}\n")
+                    continue
+            repo = target
+        else:
+            repo = Path(arg_str)
+
         repo_lang = detect_language(repo)
         if language == "unknown" and repo_lang != "unknown":
             language = repo_lang
@@ -95,8 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "analogues",
         nargs="*",
-        type=Path,
-        help="Zero or more analogue repo paths",
+        help="Zero or more analogue repo URLs or local paths",
     )
     args = parser.parse_args(argv)
 
