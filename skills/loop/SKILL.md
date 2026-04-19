@@ -96,6 +96,17 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
 
    This is the adapter-output shape. If you invoked `skillgoid:python-gates` (or any language-gates adapter), use its stdout object verbatim as `gate_report` — it already has this shape. If you are running gates manually without invoking an adapter, construct this exact object form. Do **not** use a flat list like `[{"gate_id": ..., "passed": ...}]`. The scripts accept flat-lists for backward compatibility with legacy iteration records, but this object form is the contract.
 
+   **`exit_reason` values** — write exactly one per iteration record:
+
+   | `exit_reason` value | When to write it |
+   |---|---|
+   | `"in_progress"` | Gates failed, budget remains, no stall detected. The loop will continue to iteration N+1. |
+   | `"success"` | All gates passed (`gate_report.passed == true`). Terminal. |
+   | `"budget_exhausted"` | This is iteration N and N ≥ `max_attempts`. Terminal with failure. |
+   | `"stalled"` | `failure_signature` equals the previous iteration's `failure_signature`. Terminal with failure. |
+
+   Write the field as `exit_reason`, not `status`. The schema, `scripts/stall_check.py`, `hooks/detect-resume.sh`, and `hooks/gate-guard.sh` all key off `exit_reason`. Using `status` will cause hooks to silently miss completed chunks and gate-guard to miss failing iterations. (The hooks do fall back to `status` for backward compatibility with pre-v0.10 records, but that fallback exists to rescue legacy data, not to license new drift.)
+
    Mark `notable: true` when the reflection surfaces a non-obvious lesson (unexpected tool behavior, surprising library edge case, a design decision that changed the plan). Boring iterations stay `notable: false`. The final written file must have a real 16-char hex in `failure_signature` — the schema will reject a placeholder.
 
 ### Scratch files — keep them out of the project tree
