@@ -61,7 +61,25 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
      "started_at": "ISO-8601",
      "ended_at": "ISO-8601",
      "gates_run": ["pytest", "ruff"],
-     "gate_report": { ... verbatim from adapter ... },
+     "gate_report": {
+       "passed": false,
+       "results": [
+         {
+           "gate_id": "pytest_unit",
+           "passed": false,
+           "stdout": "",
+           "stderr": "FAILED tests/test_foo.py::test_bar - AssertionError",
+           "hint": "check the return value of parse_iso8601 for fixed offsets"
+         },
+         {
+           "gate_id": "ruff_lint",
+           "passed": true,
+           "stdout": "All checks passed!",
+           "stderr": "",
+           "hint": ""
+         }
+       ]
+     },
      "reflection": "<1–3 paragraphs: what was tried, what failed, hypothesis for next attempt>",
      "notable": false,
      "failure_signature": "<16-char hex from stall_check.py>",
@@ -69,6 +87,9 @@ while gates fail AND attempts < max_attempts AND progress != stalled:
      "exit_reason": "in_progress"
    }
    ```
+
+   This is the adapter-output shape. If you invoked `skillgoid:python-gates` (or any language-gates adapter), use its stdout object verbatim as `gate_report` — it already has this shape. If you are running gates manually without invoking an adapter, construct this exact object form. Do **not** use a flat list like `[{"gate_id": ..., "passed": ...}]`. The scripts accept flat-lists for backward compatibility with legacy iteration records, but this object form is the contract.
+
    Mark `notable: true` when the reflection surfaces a non-obvious lesson (unexpected tool behavior, surprising library edge case, a design decision that changed the plan). Boring iterations stay `notable: false`. The final written file must have a real 16-char hex in `failure_signature` — the schema will reject a placeholder.
 
 ### Scratch files — keep them out of the project tree
