@@ -22,6 +22,11 @@ Given a stuck chunk and a one-sentence human hint, re-dispatches the chunk's sub
 
 - `chunk_id` — must match an entry in `.skillgoid/chunks.yaml`.
 - `hint` — a single sentence. Shorter is better.
+- `--dry-run` (optional flag) — preview the constructed subagent prompt without dispatching. Attempt counter is not reset, no iteration record is written, and unstick budget is not consumed. Useful for validating the hint before spending it.
+
+**Invocation forms:**
+- Normal: `/skillgoid:unstick <chunk_id> "<hint>"`
+- Dry-run: `/skillgoid:unstick <chunk_id> --dry-run "<hint>"`
 
 ## Procedure
 
@@ -31,19 +36,39 @@ Given a stuck chunk and a one-sentence human hint, re-dispatches the chunk's sub
    - If `exit_reason` ∈ {`stalled`, `budget_exhausted`} — proceed.
    - If `exit_reason == "in_progress"` — the loop is still running or was interrupted. Unstick in this case means "restart with hint" — ask user to confirm.
 3. **Check unstick budget** — count prior unstick invocations for this chunk by inspecting `iterations/*.json` records where `unstick_hint` field is present. Cap total unsticks per chunk at 3 (prevents runaway).
-4. **Dispatch a fresh chunk subagent** — same dispatch pattern as `build` step 3c, with TWO differences:
+4. **Construct the chunk subagent prompt** — same dispatch-prep pattern as `build` step 3c, with TWO differences:
    - Inject the `<hint>` into the chunk prompt's `## Integration failure context (populated on integration auto-repair, empty otherwise)` slot (repurpose the v0.2 slot — it was designed for exactly this kind of mid-flight hint injection).
    - Prefix the hint with: `"UNSTICK HINT (from human operator): "` so the subagent knows the source.
+
+   **If `--dry-run` was passed:** do NOT dispatch the subagent. Instead, print the full constructed prompt to stdout wrapped in a banner:
+
+   ```
+   --- begin dispatched prompt ---
+   <full prompt including UNSTICK HINT (from human operator): <hint>>
+   --- end dispatched prompt ---
+   ```
+
+   Return immediately after printing. Do NOT reset the attempt counter (step 5 is skipped), do NOT write an iteration record (step 6 is skipped), do NOT count against the unstick budget from step 3 — a dry-run is a read-only preview.
+
+   **Otherwise (no `--dry-run`):** dispatch the subagent with the constructed prompt and proceed to step 5.
 5. **Reset the attempt counter.** The subagent starts from iteration N+1 but with `attempt=1` for its internal `max_attempts` tracking. (This is semantic — just don't pass a starting `attempt` arg to `loop`.)
 6. **Mark the new iteration record** with `unstick_hint: "<hint>"` so future unstick budget counts can find it.
 7. **Continue the build loop** from that point — the subagent returns with a fresh `exit_reason`, and `build` resumes the normal per-chunk loop.
 
 ## Output
 
-On success:
+On success (normal dispatch):
 ```
 unstick: chunk <chunk_id> re-dispatched with hint.
 Subagent returned: <exit_reason>, iterations_used: N, gates: <summary>
+```
+
+On `--dry-run`:
+```
+--- begin dispatched prompt ---
+<full constructed chunk subagent prompt, including the UNSTICK HINT prefix>
+--- end dispatched prompt ---
+unstick: dry-run complete. No dispatch, no iteration record, no budget consumed.
 ```
 
 On over-budget:
