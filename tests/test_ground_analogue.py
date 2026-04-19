@@ -13,6 +13,7 @@ from scripts.synthesize.ground_analogue import (
     detect_language,
     extract_observations,
     parse_pyproject_test_command,
+    parse_pyproject_tool_sections,
     parse_workflow_steps,
 )
 
@@ -131,3 +132,69 @@ def test_classify_command_empty_string_returns_run_command():
     # never "cli-command-runs"). Lock in the current behavior.
     assert _classify_command("") == "run-command"
     assert _classify_command("   ") == "run-command"
+
+
+def test_parse_pyproject_tool_sections_pytest_only(tmp_path):
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text(
+        "[tool.pytest.ini_options]\n"
+        'addopts = "-rxXs"\n'
+    )
+    out = parse_pyproject_tool_sections(pp)
+    assert out == [("pytest", "pytest", "tool.pytest.ini_options")]
+
+
+def test_parse_pyproject_tool_sections_all_four(tmp_path):
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text(
+        "[tool.pytest.ini_options]\n"
+        'addopts = "-rxXs"\n'
+        "[tool.ruff.lint]\n"
+        'select = ["E", "F"]\n'
+        "[tool.mypy]\n"
+        "strict = true\n"
+        "[tool.coverage.run]\n"
+        'omit = ["venv/*"]\n'
+    )
+    out = parse_pyproject_tool_sections(pp)
+    # Order is stable: pytest, ruff, mypy, coverage
+    assert out == [
+        ("pytest", "pytest", "tool.pytest.ini_options"),
+        ("ruff", "ruff check .", "tool.ruff.lint"),
+        ("mypy", "mypy .", "tool.mypy"),
+        ("coverage", "coverage run -m pytest", "tool.coverage.run"),
+    ]
+
+
+def test_parse_pyproject_tool_sections_ruff_top_level(tmp_path):
+    # [tool.ruff] with no sub-section still counts as ruff configured.
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text(
+        "[tool.ruff]\n"
+        "line-length = 100\n"
+    )
+    out = parse_pyproject_tool_sections(pp)
+    assert out == [("ruff", "ruff check .", "tool.ruff")]
+
+
+def test_parse_pyproject_tool_sections_missing_returns_empty(tmp_path):
+    pp = tmp_path / "pyproject.toml"
+    assert parse_pyproject_tool_sections(pp) == []
+
+
+def test_parse_pyproject_tool_sections_malformed_returns_empty(tmp_path):
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text("not valid toml =[[[\n")
+    assert parse_pyproject_tool_sections(pp) == []
+
+
+def test_parse_pyproject_tool_sections_no_recognized_tools(tmp_path):
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text(
+        "[tool.poetry]\n"
+        'name = "demo"\n'
+        "[tool.black]\n"
+        'line-length = 88\n'
+    )
+    # Neither poetry nor black is in our recognized set.
+    assert parse_pyproject_tool_sections(pp) == []

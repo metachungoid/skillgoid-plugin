@@ -78,6 +78,59 @@ def parse_pyproject_test_command(pyproject: Path) -> list[str] | None:
     return ["pytest", *testpaths]
 
 
+# Ordered: pytest, ruff, mypy, coverage. The tuple is (section-keys-to-check,
+# tool-name, inferred-command). We check the first matching section key and
+# stop — `tool.ruff.lint` wins over a bare `tool.ruff` when both exist, but
+# either alone is enough.
+_PYPROJECT_TOOL_SPECS: list[tuple[tuple[str, ...], str, str]] = [
+    (("tool", "pytest", "ini_options"), "pytest", "pytest"),
+    (("tool", "ruff", "lint"), "ruff", "ruff check ."),
+    (("tool", "ruff"), "ruff", "ruff check ."),
+    (("tool", "mypy"), "mypy", "mypy ."),
+    (("tool", "coverage", "run"), "coverage", "coverage run -m pytest"),
+]
+
+
+def parse_pyproject_tool_sections(
+    pyproject: Path,
+) -> list[tuple[str, str, str]]:
+    """Return (tool, inferred_command, section_name) for each recognized
+    [tool.*] section found in pyproject.toml.
+
+    One entry per tool (deduped at call site even if multiple section keys match).
+    Result order: pytest, ruff, mypy, coverage. Returns [] if pyproject missing
+    or malformed.
+    """
+    if not pyproject.exists():
+        return []
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover — Python <3.11 not supported
+        return []
+    try:
+        data = tomllib.loads(pyproject.read_text())
+    except tomllib.TOMLDecodeError:
+        return []
+
+    found: list[tuple[str, str, str]] = []
+    seen_tools: set[str] = set()
+    for keys, tool, command in _PYPROJECT_TOOL_SPECS:
+        if tool in seen_tools:
+            continue
+        cursor: object = data
+        for key in keys:
+            if not isinstance(cursor, dict) or key not in cursor:
+                cursor = None
+                break
+            cursor = cursor[key]
+        if cursor is None:
+            continue
+        section_name = ".".join(keys)
+        found.append((tool, command, section_name))
+        seen_tools.add(tool)
+    return found
+
+
 def parse_workflow_steps(workflow_yml: Path) -> list[str]:
     """Extract every `run:` step's command string from a GitHub Actions YAML."""
     if not workflow_yml.exists():
