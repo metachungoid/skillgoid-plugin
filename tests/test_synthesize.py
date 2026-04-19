@@ -12,6 +12,7 @@ import pytest
 
 from scripts.synthesize._common import save_json, synthesis_path
 from scripts.synthesize.synthesize import (
+    SUPPORTED_GATE_TYPES,
     DraftValidationError,
     parse_subagent_output,
     run_synthesize,
@@ -19,6 +20,17 @@ from scripts.synthesize.synthesize import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = [sys.executable, str(ROOT / "scripts" / "synthesize" / "synthesize.py")]
+
+
+def test_supported_gate_types_matches_schema_enum():
+    """Fail loudly if criteria.schema.json adds a gate type the parser doesn't know."""
+    schema_path = ROOT / "schemas" / "criteria.schema.json"
+    schema = json.loads(schema_path.read_text())
+    schema_enum = schema["properties"]["gates"]["items"]["properties"]["type"]["enum"]
+    assert SUPPORTED_GATE_TYPES == set(schema_enum), (
+        f"SUPPORTED_GATE_TYPES drifted from schema enum. "
+        f"Script: {sorted(SUPPORTED_GATE_TYPES)}, Schema: {sorted(schema_enum)}"
+    )
 
 
 def _grounding_payload() -> dict:
@@ -150,8 +162,6 @@ def test_run_synthesize_writes_drafts_json(tmp_path):
     sg = tmp_path / ".skillgoid"
     sg.mkdir()
     save_json(synthesis_path(sg, "grounding.json"), _grounding_payload())
-    sg_synth = sg / "synthesis"
-    sg_synth.mkdir(exist_ok=True)
 
     out_path = run_synthesize(sg, _well_formed_subagent_output())
 
@@ -164,7 +174,6 @@ def test_cli_reads_subagent_output_from_stdin(tmp_path):
     sg = tmp_path / ".skillgoid"
     sg.mkdir()
     save_json(synthesis_path(sg, "grounding.json"), _grounding_payload())
-    (sg / "synthesis").mkdir(exist_ok=True)
 
     result = subprocess.run(
         CLI + ["--skillgoid-dir", str(sg)],
@@ -179,7 +188,6 @@ def test_cli_validation_failure_exits_one(tmp_path):
     sg = tmp_path / ".skillgoid"
     sg.mkdir()
     save_json(synthesis_path(sg, "grounding.json"), _grounding_payload())
-    (sg / "synthesis").mkdir(exist_ok=True)
 
     bad = json.dumps({"drafts": [
         {"id": "x", "type": "magic", "args": [],
