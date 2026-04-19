@@ -71,6 +71,11 @@
     "exit_reason": {
       "type": "string",
       "enum": ["in_progress", "success", "budget_exhausted", "stalled"]
+    },
+    "status": {
+      "type": "string",
+      "deprecated": true,
+      "description": "Deprecated alias for exit_reason. Hooks (detect-resume.sh, gate-guard.sh) fall back to this field if exit_reason is absent, preserving legacy records. New records must use exit_reason; this entry documents the deprecation so readers don't rely on status."
     }
   },
   "additionalProperties": true
