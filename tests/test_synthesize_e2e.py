@@ -186,6 +186,10 @@ def test_e2e_canonical_coverage_gate(tmp_path):
     })
     run_synthesize(sg, subagent_output)
 
+    # Stage 3: validate (oracle label is env-dependent — we only assert presence)
+    from scripts.synthesize.validate import run_validate
+    run_validate(sg, skip=False)
+
     # Stage 4: write
     out = run_write_criteria(sg)
     text = out.read_text()
@@ -195,3 +199,42 @@ def test_e2e_canonical_coverage_gate(tmp_path):
     assert "mini-flask-demo/.github/workflows/test.yml" in text
     # No args line anywhere in the output (the coverage gate is the only gate)
     assert "args:" not in text
+    # Oracle label is present (exact label depends on env: pytest-cov availability)
+    assert "# validated: " in text
+    first_validated_line = next(
+        line for line in text.splitlines() if line.strip().startswith("# validated:")
+    )
+    label = first_validated_line.split(":", 1)[1].strip()
+    assert label in ("oracle", "smoke-only", "none")
+
+
+def test_e2e_skip_validation_labels_all_gates_none(tmp_path):
+    """With --skip-validation the rendered YAML labels every gate 'none'
+    and carries the 'validation skipped' warn line.
+    """
+    import json as _json
+    from scripts.synthesize.ground import run_ground
+    from scripts.synthesize.synthesize import run_synthesize
+    from scripts.synthesize.validate import run_validate
+    from scripts.synthesize.write_criteria import run_write_criteria
+
+    sg = tmp_path / ".skillgoid"
+    sg.mkdir()
+    (sg / "goal.md").write_text("Mini flask demo.\n")
+
+    fixture = Path(__file__).resolve().parents[0] / "fixtures" / "synthesize" / "mini-flask-demo"
+    run_ground(sg, [fixture])
+
+    subagent_output = _json.dumps({"drafts": [
+        {"id": "ruff_check", "type": "ruff", "args": ["check", "."],
+         "provenance": {"source": "analogue", "ref": "mini-flask-demo/pyproject.toml"},
+         "rationale": "lint"},
+    ]})
+    run_synthesize(sg, subagent_output)
+
+    run_validate(sg, skip=True)
+
+    out = run_write_criteria(sg)
+    text = out.read_text()
+    assert "# validated: none" in text
+    assert "# warn: validation skipped by --skip-validation" in text
