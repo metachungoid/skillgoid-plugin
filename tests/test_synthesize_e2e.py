@@ -37,6 +37,14 @@ def test_full_pipeline_with_mocked_subagent(tmp_path):
     assert grounding["language_detected"] == "python"
     assert len(grounding["observations"]) >= 2
 
+    # Phase 1.5: tool-section and wrapper-follow observations
+    observed_types = {o["observed_type"] for o in grounding["observations"]}
+    assert "ruff" in observed_types, "pyproject [tool.ruff] should produce ruff observation"
+    assert "mypy" in observed_types, "pyproject [tool.mypy] should produce mypy observation"
+    refs = {o["ref"] for o in grounding["observations"]}
+    assert any("pyproject.toml#tool." in r for r in refs), "expected at least one pyproject tool-section ref"
+    assert any(r.endswith("scripts/test") for r in refs), "expected at least one wrapper-script ref"
+
     # Stage 2: simulate subagent output by hand-picking refs from grounding
     # The subagent's output must cite refs that exist in grounding.json.
     pytest_obs = next(o for o in grounding["observations"] if o["observed_type"] == "pytest")
