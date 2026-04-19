@@ -35,8 +35,10 @@ A synthesized `criteria.yaml.proposed` is directly usable by `/skillgoid:build` 
 **Schema (`schemas/criteria.schema.json`):** under the `oneOf` variant for `type: coverage`:
 
 - `min_percent` — required, integer, 0–100.
-- `args` — disallowed (schema rejects).
+- `args` — disallowed (`"args": {"not": {}}` or equivalent schema-level rejection).
 - Existing `target`, `compare_to_baseline`, `timeout`, `env` — unchanged.
+
+This is a **schema-level** tightening: any `type: coverage` gate with `args` (or missing `min_percent`) fails schema validation during the build pipeline's `feasibility` stage, not just synthesis. See Backward Compatibility below for migration.
 
 **Grounding (`scripts/synthesize/ground.py`):** new observation type `coverage_threshold`, extracted from two sources:
 
@@ -99,7 +101,7 @@ Git URLs clone to `_cache_dir() / <slug>/`. Local path analogues are used as-is 
 
 - After per-gate validation, if `len([d for d in drafts if d.type == "coverage"]) > 1`:
   - Keep one draft with `min_percent = max(d.min_percent for d in coverage_drafts)`.
-  - Union `provenance.ref` into a list if multiple unique refs (update schema `provenance` to accept `ref: str | list[str]` — or wrap in a single `refs: list[str]` field; see Open question below).
+  - Union `provenance.ref` into a list if multiple unique refs. Schema updates `provenance.ref` from `string` to `oneOf: [string, array<string>]`; `write_criteria.py` renders a single ref as `# source: analogue, ref: <r>` and multi-ref as `# source: analogue, refs:\n#   - <r1>\n#   - <r2>`.
   - Concatenate `rationale` with `" + "`.
   - Replace the old drafts in the output list.
 - Log to stderr: `"collapsed <N> coverage drafts into one (min_percent=<max>)"`.
@@ -172,16 +174,6 @@ drafts JSON → synthesize.py Stage 2:
 - Simulated subagent output emits one `type: coverage` gate with `min_percent: 100` (or 95 — either pick passes if prompt instruction is followed; test asserts the subagent's choice is provenance-cited).
 - Final `criteria.yaml.proposed` asserts the coverage gate has no `args` and has `min_percent` set.
 
-## Open question (resolve during implementation, not blocking spec)
-
-The `provenance` field in drafts is currently `{source: str, ref: str}` (single ref). After 13c collapse of multiple coverage drafts, we need to preserve multiple refs. Three options:
-
-1. **Widen `ref` to `str | list[str]`.** Schema and write_criteria.py both update.
-2. **Add separate `refs: list[str]` alongside `ref`.** Keep single-ref case clean.
-3. **Keep single `ref`; emit the collapsed draft's `ref` as a synthetic "merged:<ref1>+<ref2>" string.** No schema change; ugly provenance.
-
-Implementation plan should pick one. Recommend **1** (widen) — cleanest, single code path.
-
 ## Risks
 
 - **Subagent prompt drift.** Teaching the canonical shape is prose; the subagent may still emit CLI-shaped coverage drafts. Dedup + validator-reject serves as belt-and-suspenders but means some runs fail at Stage 2 until prompt is re-tuned.
@@ -190,9 +182,22 @@ Implementation plan should pick one. Recommend **1** (widen) — cleanest, singl
 
 ## Backward compatibility
 
-- Existing `criteria.yaml` files with `type: coverage` using the old loose shape (no `min_percent`, args present) **remain valid at the adapter level** — the adapter continues to ignore args and uses default `min_percent=80`. v0.10 tightens only the synthesis-stage validator, not the adapter's runtime acceptance. Users whose hand-authored `criteria.yaml` uses the old shape see no behavior change.
-- **Synthesis re-runs** against analogues will produce the new shape. If a user regenerates and the new shape crashes their build script somewhere downstream, they can edit back.
-- Existing `.skillgoid/synthesis/analogues/` directories in user projects are migrated on next ground run — non-destructive unless both copies exist.
+**v0.10 is a breaking schema change for the narrow set of `type: coverage` gates that used the old loose shape.** The justification: the "loose shape" was silently broken — `args` was ignored and the user's intended threshold was dropped. A loud schema error at feasibility is better than a silent semantic loss at runtime.
+
+Breaking surface:
+- Hand-authored `type: coverage` gates with `args: ['report', '--fail-under=100', ...]` or similar **fail schema validation** in `/skillgoid:build`'s feasibility stage after upgrade.
+- Migration is mechanical:
+  - **If user intent was threshold enforcement:** change `args: ['report', '--fail-under=N', ...]` → `min_percent: N` (drop the args).
+  - **If user intent was literal CLI invocation** (rare: `coverage combine`, `coverage erase`, custom flags): change `type: coverage` → `type: run-command` with `command: "coverage <subcommand> [args...]"`.
+
+Non-breaking surface:
+- Any `type: coverage` gate that already had `min_percent` set (no args) continues to work unchanged.
+- All other gate types (`ruff`, `mypy`, `pytest`, `run-command`, `cli-command-runs`, `import-clean`) are unchanged.
+- Existing `.skillgoid/synthesis/analogues/` directories are migrated automatically on next `ground.py` run (non-destructive).
+
+**Release note wording (for README / CHANGELOG on v0.10 tag):**
+
+> **Breaking:** `type: coverage` gates no longer accept `args`. The loose shape silently dropped `--fail-under=N` thresholds. Migration: replace `args: ['report', '--fail-under=N']` with `min_percent: N`, or switch to `type: run-command` for literal CLI usage. See spec v0.10 for details.
 
 ## Implementation sequencing
 
