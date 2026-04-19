@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -61,6 +62,35 @@ def _cache_dir() -> Path:
         return fallback
 
 
+def _migrate_legacy_analogues(sg: Path) -> None:
+    """Move any project-local analogue clones into the user-global cache dir.
+
+    Scans <sg>/synthesis/analogues/<slug>/ and for each child directory:
+      - If the cache dir has no entry with that name, rename the project-local
+        copy into the cache dir.
+      - If both exist, leave both alone and emit an "orphaned" warning.
+
+    Idempotent: safe to call on every ground.py run.
+    """
+    cache_root = _cache_dir()
+    legacy_root = sg / "synthesis" / "analogues"
+    if not legacy_root.is_dir():
+        return
+    for child in sorted(legacy_root.iterdir()):
+        if not child.is_dir():
+            continue
+        target = cache_root / child.name
+        if target.exists():
+            sys.stderr.write(
+                f"warning: analogue cache already exists at {target}; "
+                f"project-local copy at {child} is now orphaned, "
+                f"please remove manually\n"
+            )
+            continue
+        shutil.move(str(child), str(target))
+        sys.stderr.write(f"migrated {child.name} analogue to {target}\n")
+
+
 _URL_PREFIX_RE = re.compile(r"^(https?://|git@|ssh://|git://|file://)")
 _SLUG_TAIL_RE = re.compile(r"([^/:]+)[/:]([^/:]+?)(?:\.git)?/?$")
 
@@ -93,6 +123,7 @@ def run_ground(sg: Path, analogues: list) -> Path:
     in-place.
     """
     ensure_synthesis_dir(sg)
+    _migrate_legacy_analogues(sg)
 
     observations: list[dict] = []
     language = "unknown"

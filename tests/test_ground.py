@@ -197,3 +197,48 @@ def test_run_ground_accepts_local_path_without_copying(tmp_path, monkeypatch):
     # grounding.json still reflects observations from the in-place path
     grounding = json.loads((sg / "synthesis" / "grounding.json").read_text())
     assert any(o["command"].startswith("pytest") for o in grounding["observations"])
+
+
+def test_migrate_moves_legacy_to_cache(tmp_path, monkeypatch, capsys):
+    from scripts.synthesize.ground import _migrate_legacy_analogues
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    sg = tmp_path / ".skillgoid"
+    legacy = sg / "synthesis" / "analogues" / "pallets-flask"
+    legacy.mkdir(parents=True)
+    (legacy / "pyproject.toml").write_text("# marker\n")
+    _migrate_legacy_analogues(sg)
+    moved = tmp_path / "cache" / "skillgoid" / "analogues" / "pallets-flask"
+    assert (moved / "pyproject.toml").read_text() == "# marker\n"
+    assert not legacy.exists()
+    captured = capsys.readouterr()
+    assert "migrated pallets-flask" in captured.err
+
+
+def test_migrate_conflict_leaves_both_and_warns(tmp_path, monkeypatch, capsys):
+    from scripts.synthesize.ground import _migrate_legacy_analogues
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    sg = tmp_path / ".skillgoid"
+    legacy = sg / "synthesis" / "analogues" / "pallets-flask"
+    legacy.mkdir(parents=True)
+    (legacy / "LEGACY").write_text("x")
+    cached = tmp_path / "cache" / "skillgoid" / "analogues" / "pallets-flask"
+    cached.mkdir(parents=True)
+    (cached / "CACHED").write_text("y")
+    _migrate_legacy_analogues(sg)
+    assert (legacy / "LEGACY").exists()  # not moved
+    assert (cached / "CACHED").exists()  # untouched
+    captured = capsys.readouterr()
+    assert "orphaned" in captured.err
+
+
+def test_migrate_noop_when_no_legacy(tmp_path, monkeypatch):
+    from scripts.synthesize.ground import _migrate_legacy_analogues
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    sg = tmp_path / ".skillgoid"
+    sg.mkdir()
+    # Nothing to migrate
+    _migrate_legacy_analogues(sg)
+    # No directories created in cache
+    cache_root = tmp_path / "cache" / "skillgoid" / "analogues"
+    assert cache_root.is_dir()  # _cache_dir() creates this lazily; OK either way
+    assert list(cache_root.iterdir()) == []
