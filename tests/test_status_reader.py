@@ -4,7 +4,6 @@ status_reader is read-only: it never mutates .skillgoid/ state. These tests
 exercise the pure rendering logic plus the CLI end-to-end via tmp_path.
 """
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -13,12 +12,6 @@ from scripts.status_reader import render_status
 
 ROOT = Path(__file__).resolve().parents[1]
 CLI = [sys.executable, str(ROOT / "scripts" / "status_reader.py")]
-
-
-def _cli_env() -> dict:
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT)
-    return env
 
 
 def _write_chunks(sg: Path, chunks: list[dict]) -> None:
@@ -199,7 +192,7 @@ def test_cli_no_skillgoid_dir_exits_one(tmp_path):
     # No .skillgoid/ in tmp_path → CLI exits 1 with clear stderr
     result = subprocess.run(
         CLI + ["--skillgoid-dir", str(tmp_path / ".skillgoid")],
-        capture_output=True, text=True, env=_cli_env(),
+        capture_output=True, text=True,
     )
     assert result.returncode == 1
     assert "not a Skillgoid project" in result.stderr
@@ -214,7 +207,7 @@ def test_cli_happy_path_round_trip(tmp_path):
 
     result = subprocess.run(
         CLI + ["--skillgoid-dir", str(sg)],
-        capture_output=True, text=True, cwd=tmp_path, env=_cli_env(),
+        capture_output=True, text=True, cwd=tmp_path,
     )
     assert result.returncode == 0
     assert "# Skillgoid status" in result.stdout

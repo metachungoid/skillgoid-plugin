@@ -22,7 +22,12 @@ from pathlib import Path
 
 import yaml
 
-from scripts.chunk_topo import plan_waves
+# Allow cross-script import when invoked directly as python scripts/status_reader.py
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from scripts.chunk_topo import plan_waves  # noqa: E402
 
 
 def _load_chunks(sg: Path) -> list[dict]:
