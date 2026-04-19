@@ -82,6 +82,23 @@ def test_scaffold_import_clean_emits_failing_package(tmp_path):
         assert "raise ImportError" in init.read_text()
 
 
+def test_scaffold_import_clean_prefers_module_key(tmp_path):
+    """Adapter reads `module:`, scaffold should too."""
+    gate = {"id": "imp", "type": "import-clean", "module": "myapp"}
+    with build_scaffold("import-clean", gate, analogue_cache_dir=None) as scaffold:
+        assert (scaffold / "src" / "myapp" / "__init__.py").exists()
+
+
+def test_scaffold_import_clean_rejects_path_traversal(tmp_path):
+    """A malicious pkg name (e.g. '../escape') must not create dirs outside scaffold."""
+    gate = {"id": "imp", "type": "import-clean", "module": "../../escape"}
+    with build_scaffold("import-clean", gate, analogue_cache_dir=None) as scaffold:
+        # Falls back to safe default 'mypackage'
+        assert (scaffold / "src" / "mypackage" / "__init__.py").exists()
+        # Nothing escaped the scaffold root
+        assert not (scaffold.parent / "escape").exists()
+
+
 def test_scaffold_unknown_gate_type_errors(tmp_path):
     gate = {"id": "x", "type": "future-type"}
     with pytest.raises(ValueError, match="unsupported gate type"):

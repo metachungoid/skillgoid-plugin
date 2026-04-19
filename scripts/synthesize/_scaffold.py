@@ -95,8 +95,13 @@ def _scaffold_run_command(scaffold: Path, gate: dict, analogue: Path | None) -> 
 
 
 def _scaffold_import_clean(scaffold: Path, gate: dict, analogue: Path | None) -> None:
-    args = gate.get("args") or ["mypackage"]
-    pkg_name = args[0] if args else "mypackage"
+    # Adapter reads `module:`; fall back to args[0] for tolerance, then default.
+    candidate = gate.get("module")
+    if not candidate:
+        args = gate.get("args") or []
+        candidate = args[0] if args else "mypackage"
+    # Reject anything that isn't a bare Python identifier (path traversal guard).
+    pkg_name = candidate if isinstance(candidate, str) and candidate.isidentifier() else "mypackage"
     pkg_dir = scaffold / "src" / pkg_name
     pkg_dir.mkdir(parents=True)
     (pkg_dir / "__init__.py").write_text('raise ImportError("scaffold")\n')
