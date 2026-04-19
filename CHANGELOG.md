@@ -2,6 +2,18 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## 0.11.1 (2026-04-19)
+
+### Features
+
+- `synthesize-gates` Stage 2 now auto-retries the synthesis subagent **once** when draft validation fails. The parser's stderr (naming the violated rule — bad provenance ref, missing field, unsupported gate type, etc.) is appended to the subagent's prompt on the retry. If the second attempt also fails, both stderr messages are surfaced and the skill STOPs.
+
+### Notes
+
+- Retry budget is hardcoded at 1 (2 attempts total). Malformed output on both attempts is treated as a non-transient failure — re-run the skill or hand-author `criteria.yaml`.
+- No behavioral change to `scripts/synthesize/synthesize.py`; its exit code and stderr format are unchanged.
+- No breaking changes.
+
 ## 0.11.0 (2026-04-19)
 
 ### Features
