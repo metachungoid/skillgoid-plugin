@@ -35,7 +35,16 @@
             "description": "Environment variables merged into os.environ when running this gate."
           }
         },
-        "additionalProperties": true
+        "additionalProperties": true,
+        "allOf": [
+          {
+            "if": {"properties": {"type": {"const": "coverage"}}, "required": ["type"]},
+            "then": {
+              "required": ["id", "type", "min_percent"],
+              "not": {"required": ["args"]}
+            }
+          }
+        ]
       }
     },
     "integration_gates": {
@@ -62,7 +71,16 @@
             "description": "Environment variables merged into os.environ when running this gate."
           }
         },
-        "additionalProperties": true
+        "additionalProperties": true,
+        "allOf": [
+          {
+            "if": {"properties": {"type": {"const": "coverage"}}, "required": ["type"]},
+            "then": {
+              "required": ["id", "type", "min_percent"],
+              "not": {"required": ["args"]}
+            }
+          }
+        ]
       }
     },
     "integration_retries": {
