@@ -57,7 +57,7 @@ def _latest_integration(sg: Path) -> tuple[int, dict] | None:
     integ_dir = sg / "integration"
     if not integ_dir.is_dir():
         return None
-    candidates = [p for p in integ_dir.glob("*.json")]
+    candidates = list(integ_dir.glob("*.json"))
     if not candidates:
         return None
     latest = max(candidates, key=lambda p: p.stat().st_mtime)
@@ -83,7 +83,7 @@ def _gate_state_summary(record: dict | None) -> str:
     if record is None:
         return "—"
     gate_report = record.get("gate_report") or {}
-    results = gate_report.get("results") if isinstance(gate_report, dict) else gate_report
+    results = gate_report.get("results")
     if not results:
         return "—"
     parts: list[str] = []

@@ -142,7 +142,7 @@ def test_files_touched_truncation(tmp_path):
     assert "a.py" in out and "b.py" in out
     assert "(+3 more)" in out
     # Not all 5 listed in the files column
-    assert "c.py" not in out or "d.py" not in out
+    assert "c.py" not in out and "d.py" not in out
 
 
 def test_gate_state_truncation(tmp_path):
