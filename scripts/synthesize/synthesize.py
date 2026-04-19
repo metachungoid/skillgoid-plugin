@@ -103,6 +103,24 @@ def parse_subagent_output(raw: str, grounding: dict) -> list[dict]:
                 f"draft '{gate_id}' provenance ref not found in grounding: {ref}"
             )
 
+        if gate_type == "coverage":
+            args = draft.get("args")
+            if args is not None and len(args) > 0:
+                raise DraftValidationError(
+                    f"coverage gate '{gate_id}' must not have args; "
+                    f"use type: run-command for literal CLI usage"
+                )
+            min_percent = draft.get("min_percent")
+            if min_percent is None:
+                raise DraftValidationError(
+                    f"coverage gate '{gate_id}' must have min_percent (int, 0-100)"
+                )
+            if not isinstance(min_percent, int) or min_percent < 0 or min_percent > 100:
+                raise DraftValidationError(
+                    f"coverage gate '{gate_id}' min_percent must be 0-100 "
+                    f"(got {min_percent!r})"
+                )
+
     return drafts
 
 

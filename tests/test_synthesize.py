@@ -200,3 +200,85 @@ def test_cli_validation_failure_exits_one(tmp_path):
     )
     assert result.returncode == 1
     assert "DraftValidationError" in result.stderr or "unsupported" in result.stderr
+
+
+def test_parse_rejects_coverage_with_args():
+    grounding = _grounding_payload()
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov",
+                "type": "coverage",
+                "args": ["report", "--fail-under=100"],
+                "min_percent": 100,
+                "provenance": {
+                    "source": "analogue",
+                    "ref": "mini-flask-demo/pyproject.toml",
+                },
+                "rationale": "x",
+            }
+        ]
+    })
+    with pytest.raises(DraftValidationError, match="coverage gate 'cov' must not have args"):
+        parse_subagent_output(raw, grounding)
+
+
+def test_parse_rejects_coverage_without_min_percent():
+    grounding = _grounding_payload()
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov",
+                "type": "coverage",
+                "provenance": {
+                    "source": "analogue",
+                    "ref": "mini-flask-demo/pyproject.toml",
+                },
+                "rationale": "x",
+            }
+        ]
+    })
+    with pytest.raises(DraftValidationError, match="coverage gate 'cov' must have min_percent"):
+        parse_subagent_output(raw, grounding)
+
+
+def test_parse_rejects_coverage_min_percent_out_of_range():
+    grounding = _grounding_payload()
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov",
+                "type": "coverage",
+                "min_percent": 150,
+                "provenance": {
+                    "source": "analogue",
+                    "ref": "mini-flask-demo/pyproject.toml",
+                },
+                "rationale": "x",
+            }
+        ]
+    })
+    with pytest.raises(DraftValidationError, match="min_percent must be 0-100"):
+        parse_subagent_output(raw, grounding)
+
+
+def test_parse_accepts_coverage_with_min_percent_only():
+    grounding = _grounding_payload()
+    raw = json.dumps({
+        "drafts": [
+            {
+                "id": "cov",
+                "type": "coverage",
+                "min_percent": 80,
+                "provenance": {
+                    "source": "analogue",
+                    "ref": "mini-flask-demo/pyproject.toml",
+                },
+                "rationale": "x",
+            }
+        ]
+    })
+    drafts = parse_subagent_output(raw, grounding)
+    assert drafts[0]["type"] == "coverage"
+    assert drafts[0]["min_percent"] == 80
+    assert "args" not in drafts[0]
