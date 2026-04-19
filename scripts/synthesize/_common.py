@@ -31,5 +31,9 @@ def load_json(path: Path) -> Any:
 
 
 def save_json(path: Path, payload: Any) -> None:
-    """Pretty-print payload to path (indent=2, trailing newline)."""
+    """Pretty-print payload to path (indent=2, trailing newline).
+
+    Creates parent directories if missing.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2) + "\n")
