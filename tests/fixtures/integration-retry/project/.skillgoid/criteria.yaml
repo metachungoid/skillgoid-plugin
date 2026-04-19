@@ -1,0 +1,13 @@
+language: sh
+gates:
+  - id: syntax_check_lib_a
+    type: run-command
+    args: ["bash", "-n", "src/lib_a.sh"]
+  - id: syntax_check_lib_b
+    type: run-command
+    args: ["bash", "-n", "src/lib_b.sh"]
+integration_gates:
+  - id: integration_check
+    type: run-command
+    args: ["bash", "integration/check.sh"]
+integration_retries: 1

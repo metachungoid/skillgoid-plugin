@@ -1,0 +1,15 @@
+{
+  "iteration": 1,
+  "chunk_id": "lib_b",
+  "started_at": "2026-04-18T10:00:02Z",
+  "ended_at": "2026-04-18T10:00:03Z",
+  "gate_report": {
+    "passed": true,
+    "results": [
+      {"gate_id": "syntax_check_lib_b", "passed": true, "stdout": "", "stderr": "", "hint": ""}
+    ]
+  },
+  "exit_reason": "success",
+  "notable": false,
+  "reflection": "lib_b.sh passes bash -n syntax check. The fn_a_typo bug is a runtime error, not a syntax error."
+}

@@ -1,0 +1,18 @@
+{
+  "iteration": 1,
+  "chunk_id": "__integration__",
+  "started_at": "2026-04-18T10:01:00Z",
+  "ended_at": "2026-04-18T10:01:01Z",
+  "gate_report": {
+    "passed": false,
+    "results": [
+      {
+        "gate_id": "integration_check",
+        "passed": false,
+        "stdout": "",
+        "stderr": "src/lib_b.sh: line 5: fn_a_typo: command not found",
+        "hint": "exit=127, expected 0"
+      }
+    ]
+  }
+}

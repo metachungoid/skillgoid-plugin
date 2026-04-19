@@ -1,0 +1,15 @@
+{
+  "iteration": 1,
+  "chunk_id": "lib_a",
+  "started_at": "2026-04-18T10:00:00Z",
+  "ended_at": "2026-04-18T10:00:01Z",
+  "gate_report": {
+    "passed": true,
+    "results": [
+      {"gate_id": "syntax_check_lib_a", "passed": true, "stdout": "", "stderr": "", "hint": ""}
+    ]
+  },
+  "exit_reason": "success",
+  "notable": false,
+  "reflection": "lib_a.sh passes bash -n syntax check."
+}

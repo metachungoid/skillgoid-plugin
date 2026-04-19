@@ -1,0 +1,9 @@
+chunks:
+  - id: lib_a
+    description: "Defines fn_a — the shared utility function"
+    gate_ids: [syntax_check_lib_a]
+    paths: [src/lib_a.sh]
+  - id: lib_b
+    description: "Defines fn_b — depends on fn_a from lib_a"
+    gate_ids: [syntax_check_lib_b]
+    paths: [src/lib_b.sh]
