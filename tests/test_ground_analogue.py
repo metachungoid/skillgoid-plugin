@@ -178,6 +178,21 @@ def test_parse_pyproject_tool_sections_ruff_top_level(tmp_path):
     assert out == [("ruff", "ruff check .", "tool.ruff")]
 
 
+def test_parse_pyproject_tool_sections_ruff_lint_wins_over_bare_ruff(tmp_path):
+    # When both [tool.ruff] and [tool.ruff.lint] coexist, only tool.ruff.lint
+    # should be emitted (more specific sub-section wins via seen_tools dedup).
+    pp = tmp_path / "pyproject.toml"
+    pp.write_text(
+        "[tool.ruff]\n"
+        "line-length = 100\n"
+        "[tool.ruff.lint]\n"
+        "select = ['E']\n"
+    )
+    out = parse_pyproject_tool_sections(pp)
+    assert len(out) == 1
+    assert out[0] == ("ruff", "ruff check .", "tool.ruff.lint")
+
+
 def test_parse_pyproject_tool_sections_missing_returns_empty(tmp_path):
     pp = tmp_path / "pyproject.toml"
     assert parse_pyproject_tool_sections(pp) == []
