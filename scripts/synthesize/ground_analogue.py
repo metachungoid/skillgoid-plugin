@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -165,6 +166,65 @@ def _classify_command(cmd: str) -> str | None:
     # is reserved for explicit single-binary smoke tests; we conservatively
     # default to run-command which is more permissive.
     return "run-command"
+
+
+# Lines we ignore in wrapper scripts — shell builtins and flow control.
+_WRAPPER_IGNORE_HEADS = frozenset({
+    "export", "set", "unset", "cd", "if", "then", "else", "elif", "fi",
+    "for", "do", "done", "while", "case", "esac", "trap", "source", ".",
+    "alias", "function", "local", "readonly", "return", "shift", "test",
+    "[", "[[", "exit",
+})
+
+_PREFIX_SUB_RE = re.compile(r"^\$\{[A-Z_]+\}")
+
+
+def follow_wrapper_script(script: Path, repo_root: Path) -> list[str]:
+    """Read a shell wrapper script and return the real command strings in it.
+
+    Returns [] if the script does not exist, is outside repo_root, is
+    unreadable, or contains no recognized commands. Reads at most 100
+    lines (safety cap).
+
+    The result is a list of command strings suitable for `_classify_command`.
+    Shell builtins (export, set, if, cd, etc.) are filtered. Common prefix
+    substitutions like `${PREFIX}pytest` are stripped so the classifier
+    sees `pytest`.
+    """
+    if not script.exists() or not script.is_file():
+        return []
+    # Security: reject paths that resolve outside repo_root.
+    try:
+        script.resolve().relative_to(repo_root.resolve())
+    except ValueError:
+        return []
+
+    try:
+        text = script.read_text()
+    except (OSError, UnicodeDecodeError):
+        return []
+
+    out: list[str] = []
+    for i, raw in enumerate(text.splitlines()):
+        if i >= 100:
+            break
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        # Strip a leading ${VAR} prefix substitution so the classifier can
+        # see the real command head.
+        stripped = _PREFIX_SUB_RE.sub("", line)
+        # Strip leading `./` since that's still the same command.
+        if stripped.startswith("./"):
+            stripped = stripped[2:]
+        head = stripped.split()[0] if stripped.split() else ""
+        if head in _WRAPPER_IGNORE_HEADS:
+            continue
+        # Skip assignments (FOO=bar) — not a command.
+        if "=" in head and head.split("=", 1)[0].replace("_", "").isalnum():
+            continue
+        out.append(stripped)
+    return out
 
 
 def extract_observations(repo: Path) -> list[Observation]:

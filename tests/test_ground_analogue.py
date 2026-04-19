@@ -12,6 +12,7 @@ from scripts.synthesize.ground_analogue import (
     _classify_command,
     detect_language,
     extract_observations,
+    follow_wrapper_script,
     parse_pyproject_test_command,
     parse_pyproject_tool_sections,
     parse_workflow_steps,
@@ -246,3 +247,83 @@ def test_extract_observations_pyproject_wins_over_workflow_on_dedup(tmp_path):
     assert len(ruff_obs) == 1
     assert "pyproject.toml#tool.ruff.lint" in ruff_obs[0].ref
     assert "workflows" not in ruff_obs[0].ref
+
+
+def test_follow_wrapper_script_extracts_commands(tmp_path):
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "scripts").mkdir()
+    script = repo / "scripts" / "test"
+    script.write_text(
+        "#!/bin/sh\n"
+        "set -e\n"
+        "\n"
+        "# Run the suite\n"
+        "pytest tests/\n"
+        "ruff check .\n"
+    )
+    out = follow_wrapper_script(script, repo)
+    assert out == ["pytest tests/", "ruff check ."]
+
+
+def test_follow_wrapper_script_strips_prefix_substitutions(tmp_path):
+    # Real-world httpx pattern: ${PREFIX}pytest "$@"
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "scripts").mkdir()
+    script = repo / "scripts" / "test"
+    script.write_text(
+        "#!/bin/sh\n"
+        'export PREFIX=""\n'
+        '${PREFIX}coverage run -m pytest "$@"\n'
+        '${PREFIX}ruff check .\n'
+    )
+    out = follow_wrapper_script(script, repo)
+    # Prefix substitution is stripped so the classifier can see the real head
+    assert out == ['coverage run -m pytest "$@"', "ruff check ."]
+
+
+def test_follow_wrapper_script_skips_shell_builtins(tmp_path):
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "scripts").mkdir()
+    script = repo / "scripts" / "test"
+    script.write_text(
+        "#!/bin/sh\n"
+        "export FOO=bar\n"
+        "set -ex\n"
+        "if [ -z $X ]; then\n"
+        "  pytest\n"
+        "fi\n"
+        "cd ..\n"
+    )
+    out = follow_wrapper_script(script, repo)
+    # Only `pytest` survives — export/set/if/fi/cd are filtered
+    assert out == ["pytest"]
+
+
+def test_follow_wrapper_script_missing_returns_empty(tmp_path):
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    assert follow_wrapper_script(repo / "nope", repo) == []
+
+
+def test_follow_wrapper_script_rejects_path_outside_repo(tmp_path):
+    # Security: script must be inside repo_root
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    outside = tmp_path / "outside.sh"
+    outside.write_text("#!/bin/sh\npytest\n")
+    assert follow_wrapper_script(outside, repo) == []
+
+
+def test_follow_wrapper_script_caps_at_100_lines(tmp_path):
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "scripts").mkdir()
+    script = repo / "scripts" / "test"
+    body = "#!/bin/sh\n" + "\n".join(f"cmd_{i}" for i in range(200)) + "\n"
+    script.write_text(body)
+    out = follow_wrapper_script(script, repo)
+    # 100-line cap includes the shebang line
+    assert len(out) <= 100
