@@ -31,6 +31,39 @@ claude plugin install .
 5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
 6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
 
+## What's new in v0.11
+
+Machinery reliability bundle — closes two known cracks in the build-loop orchestrator surfaced by the v0.9 chrondel stress run:
+
+- **Post-dispatch iteration-file verification.** The build orchestrator now invokes `scripts/verify_iteration_written.py` immediately after every loop subagent returns. If the subagent silently forgot to write `.skillgoid/iterations/<chunk_id>-NNN.json` — or wrote JSON that fails schema validation — the wave halts before the gate check and the user is alerted. Previously this silent-skip pattern caused `detect-resume.sh` to under-report completed chunks and `gate-guard.sh` to pick the wrong "latest" iteration.
+- **Deterministic integration-suspect identification.** `skills/build/SKILL.md` step 4g replaces hand-grep prose with `scripts/integration_suspect.py`, which scores chunks by how often their `paths:` appear as substrings in failing gate output. Ranked by (match count, latest failing gate index, alphabetical chunk_id) for full determinism — no more driver-variance in which chunk gets re-dispatched on integration failure.
+- **Terminal-MUST for iteration-file write in `loop/SKILL.md`.** Subagents now have an explicit terminal requirement: final action before returning is writing the iteration file, even on error paths (use `exit_reason: "stalled"` with partial context rather than returning with no record).
+- **Language-agnostic reference fixture.** `tests/fixtures/integration-retry/` uses `run-command` gates (the cross-adapter common denominator) to exercise the full failure → identify-suspect → fix → re-run cycle. Stays usable when TypeScript/Go adapters land in v0.15+.
+
+All changes fully backward-compatible with v0.10.
+
+## What's new in v0.10
+
+Iteration contract bundle — makes the iteration record shape authoritative across skill prose, schema, and adapter:
+
+- **Concrete `gate_report` template in `loop/SKILL.md`.** The skill now documents the exact object-form shape (`{passed, results: [...]}`) that the measure adapter emits and the iteration record expects. Kills the flat-list drift that caused stall_check to mis-hash in the v0.9 chrondel run.
+- **`failure_signature` is a hard rule.** 16-char lowercase hex, computed before writing the iteration file, never left as a placeholder. Schema enforces the pattern; empty or missing signatures silently broke stall detection before.
+- **`exit_reason` enum with explicit "not `status`" note.** Table in `loop/SKILL.md` enumerates the four values (`in_progress`, `success`, `budget_exhausted`, `stalled`) and when to write each. Schema marks `status` as a deprecated alias with a fallback documented in hooks.
+- **`measure_python.py` surfaces per-gate run-command failures.** Missing binaries (e.g., `bash` not on PATH) are now reported as a failed `GateResult` with a "command not found" hint, instead of propagating as an exception that halts the adapter.
+- **Lock-in tests.** `tests/test_v10_bundle.py` pins the stall_check object-form contract and `metrics_append` partial-outcome classification — if either breaks, the v0.10 contract has regressed.
+
+All changes fully backward-compatible with v0.9.
+
+## What's new in v0.9
+
+Recovery/resume fixes driven by the `chrondel` stress-test (8 scripted resume scenarios):
+
+- **`stall_check.py` handles flat-list `gate_report`.** The script now accepts both `[{gate_id, passed}, ...]` and `{passed, results: [...]}` shapes. Previously the flat-list shape (emitted by some legacy subagents) caused signature collisions across unrelated failures, disabling stall detection.
+- **`gate-guard.sh` uses `mtime` for latest iteration.** Previously used alphabetical sort, which picked `parser-010.json` over `parser-009.json` correctly but picked `parser-001.json` over a freshly-written `parser-002.json` when filesystem ordering varied. `mtime` is the single source of truth for "most recent iteration."
+- **`detect-resume.sh` status fallback + completed-chunks list.** The resume summary now reads `exit_reason` with a `status` fallback (for legacy records) and surfaces which chunks have already completed, so resumed sessions don't re-dispatch work that already succeeded.
+
+All changes fully backward-compatible with v0.8.
+
 ## What's new in v0.8
 
 Correctness + subagent discipline bundle driven by the `minischeme` 18-chunk stress run:
@@ -126,7 +159,7 @@ All changes are backward-compatible. Existing v0 projects resume unchanged.
 
 ## Concepts
 
-- **`.skillgoid/`** — project-local state: `goal.md`, `criteria.yaml`, `blueprint.md`, `chunks.yaml`, `iterations/NNN.json`, `retrospective.md`.
+- **`.skillgoid/`** — project-local state: `goal.md`, `criteria.yaml`, `blueprint.md`, `chunks.yaml`, `iterations/<chunk_id>-NNN.json`, `integration/<attempt>.json`, `retrospective.md`.
 - **`~/.claude/skillgoid/vault/`** — user-global curated lessons: one `<language>-lessons.md` per language, plus optional `meta-lessons.md`.
 - **Gates** — structured measurements (`pytest`, `ruff`, `mypy`, `import-clean`, `cli-command-runs`, `run-command`). Loop termination is defined in terms of these.
 - **Acceptance scenarios** — free-form success stories. Inform test-writing but do not block the loop.
