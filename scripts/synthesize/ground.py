@@ -15,7 +15,9 @@ CLI:
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 # Allow cross-script import
@@ -32,6 +34,29 @@ from scripts.synthesize.ground_analogue import (  # noqa: E402
     detect_language,
     extract_observations,
 )
+
+
+def _cache_dir() -> Path:
+    """Return the user-global cache dir for analogue clones.
+
+    Prefers $XDG_CACHE_HOME/skillgoid/analogues, falls back to
+    ~/.cache/skillgoid/analogues. If both are unwritable, falls back to
+    $TMPDIR/skillgoid-analogues and emits a stderr warning.
+    """
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".cache"
+    target = base / "skillgoid" / "analogues"
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+        return target
+    except OSError:
+        tmpdir = os.environ.get("TMPDIR") or tempfile.gettempdir()
+        fallback = Path(tmpdir) / "skillgoid-analogues"
+        fallback.mkdir(parents=True, exist_ok=True)
+        sys.stderr.write(
+            f"warning: cache dir {target} unwritable, using {fallback}\n"
+        )
+        return fallback
 
 
 def run_ground(sg: Path, analogues: list[Path]) -> Path:

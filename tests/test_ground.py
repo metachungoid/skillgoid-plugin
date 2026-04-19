@@ -84,3 +84,35 @@ def test_cli_missing_skillgoid_dir_exits_one(tmp_path):
     )
     assert result.returncode == 1
     assert "not a Skillgoid project" in result.stderr
+
+
+def test_cache_dir_uses_xdg_when_set(tmp_path, monkeypatch):
+    from scripts.synthesize.ground import _cache_dir
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    result = _cache_dir()
+    assert result == tmp_path / "skillgoid" / "analogues"
+    assert result.is_dir()
+
+
+def test_cache_dir_defaults_to_home_cache_when_xdg_unset(tmp_path, monkeypatch):
+    from scripts.synthesize.ground import _cache_dir
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    # Path.home() is read from HOME on POSIX
+    result = _cache_dir()
+    assert result == tmp_path / ".cache" / "skillgoid" / "analogues"
+    assert result.is_dir()
+
+
+def test_cache_dir_falls_back_to_tmpdir_when_unwritable(tmp_path, monkeypatch, capsys):
+    from scripts.synthesize import ground
+    # Force XDG_CACHE_HOME to a path that cannot be created (a file, not a dir)
+    blocker = tmp_path / "blocker"
+    blocker.write_text("")  # it's a file, so making subdirs under it fails
+    monkeypatch.setenv("XDG_CACHE_HOME", str(blocker))
+    monkeypatch.setenv("TMPDIR", str(tmp_path / "tmp"))
+    result = ground._cache_dir()
+    assert result.is_dir()
+    assert str(result).startswith(str(tmp_path / "tmp"))
+    captured = capsys.readouterr()
+    assert "warning" in captured.err.lower()
