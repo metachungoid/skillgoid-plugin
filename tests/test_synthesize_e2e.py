@@ -143,3 +143,55 @@ def test_synthesize_rejects_draft_with_nonexistent_provenance_ref(tmp_path):
     ], input=fake)
     assert result.returncode == 1
     assert "provenance ref not found" in result.stderr
+
+
+def test_e2e_canonical_coverage_gate(tmp_path):
+    """Running the full pipeline with a subagent draft that cites coverage_threshold
+    observations produces a criteria.yaml.proposed where the coverage gate has
+    min_percent set and no args.
+    """
+    import json as _json
+    from scripts.synthesize.ground import run_ground
+    from scripts.synthesize.synthesize import run_synthesize
+    from scripts.synthesize.write_criteria import run_write_criteria
+
+    sg = tmp_path / ".skillgoid"
+    sg.mkdir()
+    (sg / "goal.md").write_text("Build a mini flask demo with coverage >= 95.\n")
+
+    # Stage 1: ground from the updated fixture
+    fixture = Path(__file__).resolve().parents[0] / "fixtures" / "synthesize" / "mini-flask-demo"
+    run_ground(sg, [fixture])
+    grounding = _json.loads((sg / "synthesis" / "grounding.json").read_text())
+
+    # Assert both coverage_threshold observations present (100 from pyproject, 95 from CI)
+    thresholds = [o for o in grounding["observations"] if o["observed_type"] == "coverage_threshold"]
+    values = sorted(int(t["command"].split("=")[1]) for t in thresholds)
+    assert values == [95, 100]
+
+    # Stage 2: hand-craft a subagent output that cites the CI threshold (95 per prompt policy)
+    subagent_output = _json.dumps({
+        "drafts": [
+            {
+                "id": "coverage_main",
+                "type": "coverage",
+                "min_percent": 95,
+                "provenance": {
+                    "source": "analogue",
+                    "ref": "mini-flask-demo/.github/workflows/test.yml",
+                },
+                "rationale": "coverage_threshold=95 from CI step --fail-under",
+            }
+        ]
+    })
+    run_synthesize(sg, subagent_output)
+
+    # Stage 4: write
+    out = run_write_criteria(sg)
+    text = out.read_text()
+    # Canonical shape: min_percent present, no args line
+    assert "min_percent: 95" in text
+    # Source ref is cited in the comment block
+    assert "mini-flask-demo/.github/workflows/test.yml" in text
+    # No args line anywhere in the output (the coverage gate is the only gate)
+    assert "args:" not in text
