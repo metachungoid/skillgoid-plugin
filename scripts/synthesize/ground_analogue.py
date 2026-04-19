@@ -106,7 +106,7 @@ def _classify_command(cmd: str) -> str | None:
         return "ruff"
     if head == "mypy":
         return "mypy"
-    if head in {"coverage"}:
+    if head == "coverage":
         return "coverage"
     # Anything else we treat as a generic run-command gate. cli-command-runs
     # is reserved for explicit single-binary smoke tests; we conservatively
@@ -137,7 +137,10 @@ def extract_observations(repo: Path) -> list[Observation]:
     # Source 2: GitHub Actions workflow run-steps
     workflows_dir = repo / ".github" / "workflows"
     if workflows_dir.exists():
-        for wf in sorted(workflows_dir.glob("*.yml")):
+        workflow_files = list(workflows_dir.glob("*.yml")) + list(
+            workflows_dir.glob("*.yaml")
+        )
+        for wf in sorted(workflow_files):
             for step_cmd in parse_workflow_steps(wf):
                 otype = _classify_command(step_cmd)
                 if otype is None:

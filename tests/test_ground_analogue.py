@@ -9,6 +9,7 @@ from pathlib import Path
 
 from scripts.synthesize.ground_analogue import (
     Observation,
+    _classify_command,
     detect_language,
     extract_observations,
     parse_pyproject_test_command,
@@ -96,3 +97,37 @@ def test_cli_exits_one_on_missing_repo(tmp_path):
     )
     assert result.returncode == 1
     assert "does not exist" in result.stderr
+
+
+def test_classify_command_pytest():
+    assert _classify_command("pytest tests") == "pytest"
+    assert _classify_command("pytest -v --cov") == "pytest"
+
+
+def test_classify_command_ruff():
+    assert _classify_command("ruff check .") == "ruff"
+
+
+def test_classify_command_mypy():
+    assert _classify_command("mypy src") == "mypy"
+
+
+def test_classify_command_coverage():
+    assert _classify_command("coverage run -m pytest") == "coverage"
+
+
+def test_classify_command_unrecognized_defaults_to_run_command():
+    # Policy: unrecognized commands default to "run-command", NEVER to
+    # "cli-command-runs". cli-command-runs is reserved for explicit
+    # single-binary smoke tests.
+    assert _classify_command("pip install -e .") == "run-command"
+    assert _classify_command("make build") == "run-command"
+    assert _classify_command("npm test") == "run-command"
+
+
+def test_classify_command_empty_string_returns_run_command():
+    # Empty input falls through the same path as any unrecognized head,
+    # so per the policy it also lands on "run-command" (never None,
+    # never "cli-command-runs"). Lock in the current behavior.
+    assert _classify_command("") == "run-command"
+    assert _classify_command("   ") == "run-command"
