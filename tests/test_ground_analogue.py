@@ -428,3 +428,38 @@ def test_extract_observations_wrapper_follow_is_one_level_deep(tmp_path):
     # scripts/inner is observed as a command head from depth-1 follow
     commands = [o.command for o in obs]
     assert any("scripts/inner" in c for c in commands)
+
+
+def test_coverage_threshold_from_pyproject_fail_under(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.coverage.report]\n"
+        "fail_under = 95\n"
+    )
+    obs = extract_observations(tmp_path)
+    thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
+    assert len(thresholds) == 1
+    t = thresholds[0]
+    assert t.source == "analogue"
+    assert t.ref.endswith("/pyproject.toml#tool.coverage.report")
+    assert t.command == "coverage_threshold=95"
+    assert t.context == "pyproject.toml [tool.coverage.report] declares fail_under"
+
+
+def test_coverage_threshold_absent_when_fail_under_missing(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.coverage.report]\n"
+        "show_missing = true\n"
+    )
+    obs = extract_observations(tmp_path)
+    thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
+    assert thresholds == []
+
+
+def test_coverage_threshold_non_int_is_skipped(tmp_path):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.coverage.report]\n'
+        'fail_under = "ninety"\n'
+    )
+    obs = extract_observations(tmp_path)
+    thresholds = [o for o in obs if o.observed_type == "coverage_threshold"]
+    assert thresholds == []

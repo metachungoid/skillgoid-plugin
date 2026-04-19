@@ -132,6 +132,28 @@ def parse_pyproject_tool_sections(
     return found
 
 
+def parse_pyproject_coverage_threshold(pyproject: Path) -> int | None:
+    """Return fail_under int from [tool.coverage.report], or None if missing/invalid."""
+    if not pyproject.exists():
+        return None
+    try:
+        import tomllib
+    except ImportError:  # pragma: no cover
+        return None
+    try:
+        data = tomllib.loads(pyproject.read_text())
+    except tomllib.TOMLDecodeError:
+        return None
+    fail_under = (
+        data.get("tool", {}).get("coverage", {}).get("report", {}).get("fail_under")
+    )
+    if isinstance(fail_under, bool):
+        return None
+    if isinstance(fail_under, int):
+        return fail_under
+    return None
+
+
 def parse_workflow_steps(workflow_yml: Path) -> list[str]:
     """Extract every `run:` step's command string from a GitHub Actions YAML."""
     if not workflow_yml.exists():
@@ -266,6 +288,17 @@ def extract_observations(repo: Path) -> list[Observation]:
             command=command,
             context=f"pyproject.toml [{section}] section declares {tool} configured",
             observed_type=tool,
+        ))
+
+    # Source 1c: pyproject.toml [tool.coverage.report].fail_under
+    threshold = parse_pyproject_coverage_threshold(repo / "pyproject.toml")
+    if threshold is not None:
+        observations.append(Observation(
+            source="analogue",
+            ref=f"{repo_name}/pyproject.toml#tool.coverage.report",
+            command=f"coverage_threshold={threshold}",
+            context="pyproject.toml [tool.coverage.report] declares fail_under",
+            observed_type="coverage_threshold",
         ))
 
     # Source 2: GitHub Actions workflow run-steps.
