@@ -1,6 +1,6 @@
 ---
 name: synthesize-gates
-description: Use when the user wants to author `.skillgoid/criteria.yaml` from observation rather than from scratch. Given one or more analogue reference repos, the skill grounds observations, dispatches a synthesis subagent, validates the proposed gates against the criteria schema, and writes `.skillgoid/criteria.yaml.proposed` with per-gate provenance comments. Phase 1: user-pointed analogues only, no oracle validation, all gates labeled `validated: none`. Invokable as `/skillgoid:synthesize-gates <repo-url-or-path> [<repo2> ...]`.
+description: Use when the user wants to author `.skillgoid/criteria.yaml` from observation rather than from scratch. Given one or more analogue reference repos, the skill grounds observations, dispatches a synthesis subagent, validates the proposed gates against the criteria schema, runs oracle validation against the analogue and an empty scaffold, then writes `.skillgoid/criteria.yaml.proposed` with per-gate provenance + `validated: oracle | smoke-only | none` labels. v0.11: oracle validation is on by default; pass `--skip-validation` to bypass. Invokable as `/skillgoid:synthesize-gates <repo-url-or-path> [<repo2> ...]`.
 ---
 
 # synthesize-gates
@@ -19,7 +19,6 @@ Produces a draft `criteria.yaml` from observation of one or more analogue refere
 
 - Projects with no analogue at all (Phase 1 requires at least one — Phase 2 will add context7 + curated templates as fallbacks).
 - Modifying an existing committed `criteria.yaml` directly (always writes to `.proposed` for the user to merge).
-- Validation of the gates' actual behavior (Phase 1 emits `validated: none`; Phase 2 adds oracle validation).
 
 ## Inputs
 
@@ -29,6 +28,11 @@ Produces a draft `criteria.yaml` from observation of one or more analogue refere
 - `.skillgoid/goal.md` — must already exist (run `/skillgoid:clarify` first if absent).
 
 If no analogues are provided as args, the skill interactively prompts for at least one. Phase 1 has no fallback to context7 / templates — at least one analogue is required.
+
+**Flags:**
+
+- `--skip-validation` — bypass oracle (Stage 3). Every gate lands `validated: none, warn: validation skipped by --skip-validation`.
+- `--validate-only` — skip Stages 1, 2. Re-run Stage 3 + Stage 4 against the existing `drafts.json`. Use after installing analogue deps to refresh validation without re-synthesizing.
 
 ## Procedure
 
@@ -63,13 +67,22 @@ If no analogues are provided as args, the skill interactively prompts for at lea
    ```
    If the parser exits non-zero, surface its stderr (which names the violated rule) and STOP. Do not retry the subagent in Phase 1 — surface the failure so the user can re-run or hand-author. Phase 2 will add a single auto-retry.
 
-7. **Run Stage 4 (write).** Shell out:
+7. **Run Stage 3 (validate).** Shell out:
+   ```bash
+   python <plugin-root>/scripts/synthesize/validate.py \
+     --skillgoid-dir .skillgoid
+   ```
+   Forward `--skip-validation` from the invocation if the user passed it. On non-zero exit, surface stderr and STOP. On zero exit, `.skillgoid/synthesis/validated.json` exists and labels each gate `oracle | smoke-only | none` with optional warn text.
+
+   **For `--validate-only` invocations:** skip steps 3–6. Verify `.skillgoid/synthesis/grounding.json` and `.skillgoid/synthesis/drafts.json` both exist; if either is missing, error: `"--validate-only requires a prior full synthesis run. Re-run /skillgoid:synthesize-gates <analogues> first."` Then jump directly to this step, then step 8.
+
+8. **Run Stage 4 (write).** Shell out:
    ```bash
    python <plugin-root>/scripts/synthesize/write_criteria.py \
      --skillgoid-dir .skillgoid
    ```
 
-8. **Print the next-step summary** to the user:
+9. **Print the next-step summary** to the user:
    ```
    synthesize-gates: wrote .skillgoid/criteria.yaml.proposed
 
@@ -87,18 +100,10 @@ On success: `.skillgoid/criteria.yaml.proposed` is written. Existing `.skillgoid
 
 On failure: a single error line on stderr naming the failed stage. Partial artifacts under `.skillgoid/synthesis/` may remain — these are safe to inspect or delete.
 
-## Phase 1 limitations (called out for users)
+## Phase 1 / 2 progress
 
-Phase 1.5 (v0.9.0) addressed pyproject `[tool.*]` section parsing and CI
-wrapper-script following. v0.10 tightens `type: coverage` and relocates
-analogue clones. The remaining Phase 2 gaps:
-
-- All gates are labeled `validated: none (Phase 1: oracle validation deferred)`. The user is the only validator.
-- No context7 grounding — only user-pointed analogues.
-- No curated template fallback for cold-start projects.
-- No retry on subagent output validation failure — re-run the skill if needed.
-
-Phase 2 (planned) addresses all four.
+- **v0.11 (current)**: Oracle validates analogue-cited gates. Every rendered gate carries a `validated: oracle | smoke-only | none` label derived from running the adapter against the analogue's cache-dir and an empty scaffold.
+- **Remaining Phase 2 work (v0.13/v0.14)**: context7 grounding; curated template fallback for cold-start projects; oracle for context7/template-sourced gates; subagent auto-retry on Stage 2 validation failure.
 
 ## Risks
 
@@ -106,3 +111,5 @@ Phase 2 (planned) addresses all four.
 - The `criteria.yaml.proposed` may include gate types the user's project doesn't need. The user is expected to delete unwanted gates during review.
 - If two analogue repos use conflicting conventions (e.g., one uses pytest, the other uses unittest), the synthesis subagent picks one — the rationale field should explain why.
 - `type: coverage` gates are now **declarative only**: `min_percent` required, `args` forbidden. Literal `coverage` CLI invocations must use `type: run-command`. Hand-authored criteria from pre-v0.10 that used the loose shape will fail schema validation at the build's feasibility stage — see the v0.10 release note for migration.
+- `validated: oracle` means the gate *discriminated* the analogue from an empty scaffold. That's a strong signal but not a proof of correctness. Users reviewing the criteria should still sanity-check each gate against their project's actual expectations.
+- Oracle runs the adapter in the user's current Python environment. If the analogue's test deps aren't importable, gates land `validated: none` with a warn line; install the analogue's deps (`pip install -e ~/.cache/skillgoid/analogues/<slug>[dev]`) and re-run with `--validate-only`.
