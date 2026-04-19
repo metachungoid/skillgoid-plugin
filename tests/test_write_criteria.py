@@ -160,3 +160,34 @@ def test_cli_writes_proposed_and_prints_path(tmp_path):
     assert result.returncode == 0, result.stderr
     assert (sg / "criteria.yaml.proposed").exists()
     assert "criteria.yaml.proposed" in result.stdout
+
+
+def test_gate_comment_block_renders_single_ref_as_inline():
+    from scripts.synthesize.write_criteria import _gate_comment_block
+    draft = {
+        "id": "cov",
+        "type": "coverage",
+        "min_percent": 80,
+        "provenance": {"source": "analogue", "ref": "mini/pyproject.toml"},
+    }
+    block = _gate_comment_block(draft)
+    assert "source: analogue, ref: mini/pyproject.toml" in block
+    assert "refs:" not in block
+
+
+def test_gate_comment_block_renders_list_ref_as_block():
+    from scripts.synthesize.write_criteria import _gate_comment_block
+    draft = {
+        "id": "cov",
+        "type": "coverage",
+        "min_percent": 80,
+        "provenance": {
+            "source": "analogue",
+            "ref": ["mini/pyproject.toml", "mini/.github/workflows/ci.yml"],
+        },
+    }
+    block = _gate_comment_block(draft)
+    assert "source: analogue" in block
+    assert "refs:" in block
+    assert "- mini/pyproject.toml" in block
+    assert "- mini/.github/workflows/ci.yml" in block

@@ -50,10 +50,14 @@ def _gate_comment_block(draft: dict) -> str:
     prov = draft.get("provenance") or {}
     source = prov.get("source", "unknown")
     ref = prov.get("ref", "unknown")
-    lines = [
-        f"  # source: {source}, ref: {ref}",
-        f"  # {PHASE1_VALIDATION_LABEL}",
-    ]
+    lines: list[str] = []
+    if isinstance(ref, list):
+        lines.append(f"  # source: {source}, refs:")
+        for r in ref:
+            lines.append(f"  #   - {r}")
+    else:
+        lines.append(f"  # source: {source}, ref: {ref}")
+    lines.append(f"  # {PHASE1_VALIDATION_LABEL}")
     rationale = draft.get("rationale")
     if rationale:
         lines.append(f"  # rationale: {rationale}")
