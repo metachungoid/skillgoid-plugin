@@ -4,7 +4,7 @@
 set -euo pipefail
 
 cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
-sg="$cwd/.skillgoid"
+sg="$cwd/.skillgoid"claude news
 
 if [ ! -d "$sg" ]; then
   exit 0
