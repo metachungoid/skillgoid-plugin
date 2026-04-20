@@ -29,15 +29,17 @@
 ## Install
 
 ```bash
-claude plugin install https://github.com/metachungoid/skillgoid-plugin.git
+git clone https://github.com/metachungoid/skillgoid-plugin.git
+cd skillgoid-plugin
+claude plugin install .
 ```
 
-For local development:
+Or with make:
 
 ```bash
 git clone https://github.com/metachungoid/skillgoid-plugin.git
 cd skillgoid-plugin
-make install-local   # runs: claude plugin install .
+make install-local
 ```
 
 Requires Claude Code ≥ the current release. Python ≥ 3.11 must be on your PATH (used by the gate adapter and measurement scripts).
