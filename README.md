@@ -31,7 +31,7 @@
 ```bash
 git clone https://github.com/metachungoid/skillgoid-plugin.git
 cd skillgoid-plugin
-claude plugin marketplace add .
+claude plugin marketplace add ./
 claude plugin install skillgoid
 ```
 

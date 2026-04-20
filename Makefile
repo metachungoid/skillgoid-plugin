@@ -7,7 +7,7 @@ lint:
 	ruff check .
 
 install-local:
-	claude plugin marketplace add .
+	claude plugin marketplace add ./
 	claude plugin install skillgoid
 
 clean:
