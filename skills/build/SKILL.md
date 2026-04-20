@@ -56,6 +56,7 @@ Routes a user request through the Skillgoid pipeline:
    3b. Build the subagent prompt with the curated context slice:
       - The chunk entry as YAML (id, description, gate_ids, language, depends_on, paths, gate_overrides). The `paths:` field is consumed by `git_iter_commit.py` at commit time. `gate_overrides` (v0.8) is consumed by the subagent when building its criteria subset per `skills/loop/SKILL.md` step 3.1. Pass both through verbatim.
       - `retrieve_summary` verbatim
+      - **Context7 grounding (advisory, v0.12).** If `.skillgoid/context7/framework-grounding.md` exists and is non-empty, attach its full contents as an advisory section of the subagent prompt labelled "Framework grounding (advisory — context7)". If the file is missing or `.skillgoid/context7/SKIPPED` exists, omit the section entirely. The grounding is a best-effort snapshot of idiomatic framework patterns — the chunk subagent should **prefer** the idioms when they apply but must not treat the attachment as a requirements document and must not fight the framework's actual APIs.
       - **Sliced blueprint for the chunk** (v0.8, replacing v0.2's punt on slicing). Invoke the slicer:
         ```
         python <plugin-root>/scripts/blueprint_slice.py \
@@ -78,6 +79,8 @@ Routes a user request through the Skillgoid pipeline:
       )
       ```
       When multiple chunks are in the same wave, these dispatches run in parallel. Claude Code's `Agent` tool supports concurrent subagent invocation — issue all the wave's `Agent()` tool calls in a single message so they execute in parallel.
+
+      If the prompt includes the "Framework grounding (advisory — context7)" section from step 3b, the prompt must also instruct the subagent: "Treat the framework grounding as advisory — prefer its idioms when they apply; don't fight the framework. It is not a requirements document." This keeps the chunk subagent from over-indexing on grounding that may be slightly out of date or off-topic for the specific chunk.
 
    3d. **Wait for every subagent in the wave to return** before evaluating results. This guarantees within-wave isolation.
 
