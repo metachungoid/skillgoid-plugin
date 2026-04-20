@@ -2,6 +2,30 @@
 
 All notable changes to Skillgoid. Format: Keep a Changelog. Versioning: SemVer.
 
+## 0.12.0 (2026-04-19)
+
+### Features
+
+- `plan` now dispatches a one-shot **context7 fetcher subagent** before drafting the blueprint. The fetcher infers the primary application framework from `goal.md` + manifest files (`pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`), queries the `context7` MCP for current docs, and writes `.skillgoid/context7/framework-grounding.md` (≤2000 tokens, three sections: project structure, testing patterns, common pitfalls).
+- `plan` reads the grounding file (when present) as advisory guidance while drafting `blueprint.md` — preferring framework idioms where applicable.
+- `build` attaches the grounding file to every per-chunk subagent dispatch as an **advisory** section. Chunk subagents prefer the idioms but may deviate.
+- New `--refresh-context7` flag on `plan` deletes the grounding file and any `SKIPPED` sentinel, forcing the fetcher to re-run. The flag lives on `plan` (not `build`) because `build resume` does not re-invoke `plan`.
+- Graceful skip: if the `context7` MCP is missing, the framework is inconclusive, or any query fails, the fetcher writes `.skillgoid/context7/SKIPPED` with a one-line reason and the pipeline continues unaffected.
+
+### Notes
+
+- Hand-edits to `.skillgoid/context7/framework-grounding.md` are preserved across re-runs of `plan` — the fetcher only writes when the file is missing. Use `--refresh-context7` to discard hand-edits.
+- The fetcher is a subagent dispatch, not Python code. `plan` itself remains a prose skill run by the controlling Claude.
+- Token cost: attaching a 2k-token grounding to every chunk dispatch × N chunks × M iterations adds up quickly. Acceptable at the current per-project chunk scale; revisit if projects routinely exceed 30+ chunks per build.
+- No breaking changes. Projects without the `context7` MCP installed get the graceful-skip path.
+
+### Not changing
+
+- `scripts/synthesize/synthesize.py` and all other Stage 1–4 scripts.
+- `schemas/criteria.schema.json`, `schemas/chunks.schema.json`.
+- The `synthesize-gates` skill — context7 grounding for criteria synthesis is a separate roadmap item (future release).
+- Hooks (`hooks/gate-guard.sh`, `hooks/detect-resume.sh`).
+
 ## 0.11.1 (2026-04-19)
 
 ### Features
