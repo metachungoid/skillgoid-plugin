@@ -20,14 +20,37 @@ Turns a one-line user goal into:
 
 1. **Ensure `.skillgoid/` exists** in the project root. If it already contains `goal.md` or `criteria.yaml`, ask the user whether to amend or rewrite before proceeding.
 2. **Pull past lessons** by invoking `skillgoid:retrieve` with the user's rough goal. Surface the top-level summary briefly so the user knows past context is in play.
-3. **Ask clarifying questions one at a time**, max 6 rounds unless the user asks for more. Cover:
-   - Primary user / audience
-   - Must-have vs nice-to-have features (scope boundary)
-   - Explicit non-goals
-   - Success signals the user personally cares about
-   - Language/toolchain preference (if not obvious from the goal)
-   - Any hard constraints (deadlines, dependencies, deployment target)
-   Prefer multiple-choice questions when possible.
+3. **Clarifying conversation — open-ended, one question at a time.**
+
+   **HARD RULE: ask exactly one question per message. Never list multiple questions in the same message. Wait for the user's answer before asking the next one.**
+
+   Open the conversation with this instruction to the user:
+
+   > I'll ask you questions one at a time to fully understand the project before we write anything. Answer as much or as little as you like — there's no limit to how many questions we can work through. When you feel the plan is fully hashed out and you're ready to proceed, just say **"ready"** (or **"proceed"** / **"let's build"**).
+
+   Then ask questions in priority order, starting with the highest-stakes unclear decision (usually: data source, primary framework, or deployment target). Do not ask meta questions ("do you want me to ask about X?") — just ask the thing.
+
+   After the user answers each question, do one of:
+   - Ask the **next most important unresolved question**.
+   - If the answer revealed a new fork or non-obvious implication the user may not have considered, surface it as the next question before moving on.
+   - If all high-stakes decisions are resolved, shift to depth questions: error handling, auth, data model edge cases, UX flows, scaling constraints, things users typically don't think about until mid-build.
+
+   Keep going until the user says "ready" (or equivalent). There is no round cap.
+
+   **Areas to cover** (ask in whatever order is most logical given the goal — skip any that are obviously decided):
+   - Data source(s) and external API keys required
+   - Primary framework / language (if not obvious)
+   - Deployment target (local, Docker, cloud)
+   - Auth / access control (who uses this, and how?)
+   - Data model — what are the core entities and their relationships?
+   - Key user flows end-to-end (not just the happy path)
+   - Error states and failure modes the user cares about
+   - Must-have vs explicitly out-of-scope features
+   - Success signals the user personally cares about (what does "done" feel like?)
+   - Hard constraints (deadlines, existing codebase to integrate with, forbidden dependencies)
+   - Non-obvious architectural decisions the user may not have considered — surface these proactively even if the user hasn't asked. Examples: "this design means X will be hard later", "most projects like this hit Y problem — do you want to handle it now or defer?"
+
+   Prefer multiple-choice questions when there are ≤5 reasonable options. Open-ended for anything that needs freeform input.
 4. **Draft `goal.md`** summarizing the refined understanding:
    ```markdown
    # Goal
