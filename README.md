@@ -1,186 +1,395 @@
 # Skillgoid
 
-**A Claude Code plugin that turns a rough project goal into a shipped codebase through a criteria-gated build loop with compounding cross-project memory.**
+**A Claude Code plugin that turns a rough project goal into a shipped codebase through a criteria-gated autonomous build loop with compounding cross-project memory.**
 
-- **Define success** — measurable gates, not "I think it's done".
-- **Build → measure → reflect** — loop until the gates pass.
-- **Learn across projects** — a curated per-language lessons file grows smarter with every project.
+- **Define success** — measurable gates, not vibes.
+- **Build → measure → reflect** — loops until every gate passes.
+- **Learn across projects** — a curated per-language lessons file grows smarter with every run.
+
+```
+/skillgoid:build "a Python CLI that syncs Notion tasks to a local JSON file"
+```
+
+## Contents
+
+- [Install](#install)
+- [Quickstart](#quickstart)
+- [How it works](#how-it-works)
+- [Commands](#commands)
+- [Configuring gates](#configuring-gates)
+- [State locations](#state-locations)
+- [Context7 grounding](#context7-grounding)
+- [Synthesizing gates from analogue repos](#synthesizing-gates-from-analogue-repos)
+- [Custom language adapters](#custom-language-adapters)
+- [Recovery](#recovery)
+- [Development](#development)
+
+---
 
 ## Install
 
 ```bash
-claude plugin install <git-url-or-local-path>
+claude plugin install https://github.com/metachungoid/skillgoid-plugin.git
 ```
 
-Or for local development:
+For local development:
+
 ```bash
 git clone https://github.com/metachungoid/skillgoid-plugin.git
 cd skillgoid-plugin
-claude plugin install .
+make install-local   # runs: claude plugin install .
 ```
 
-## 60-second quickstart
+Requires Claude Code ≥ the current release. Python ≥ 3.11 must be on your PATH (used by the gate adapter and measurement scripts).
 
-1. Open a fresh, empty directory.
-2. In Claude Code, run:
-   ```
-   /skillgoid:build "a Python CLI that syncs my Notion tasks to a local JSON file"
-   ```
-3. Answer a few clarifying questions when prompted.
-4. Approve the draft `goal.md`, `criteria.yaml`, and `chunks.yaml`.
-5. Skillgoid builds chunk-by-chunk, measuring gates each iteration. You watch (or step away). When the loop stalls or completes, you'll see a summary.
-6. On success, a `retrospective.md` lands in `.skillgoid/` and notable lessons are curated into `~/.claude/skillgoid/vault/python-lessons.md`.
+---
 
-## What's new in v0.11
+## Quickstart
 
-Machinery reliability bundle — closes two known cracks in the build-loop orchestrator surfaced by the v0.9 chrondel stress run:
+**Start a new project from scratch:**
 
-- **Post-dispatch iteration-file verification.** The build orchestrator now invokes `scripts/verify_iteration_written.py` immediately after every loop subagent returns. If the subagent silently forgot to write `.skillgoid/iterations/<chunk_id>-NNN.json` — or wrote JSON that fails schema validation — the wave halts before the gate check and the user is alerted. Previously this silent-skip pattern caused `detect-resume.sh` to under-report completed chunks and `gate-guard.sh` to pick the wrong "latest" iteration.
-- **Deterministic integration-suspect identification.** `skills/build/SKILL.md` step 4g replaces hand-grep prose with `scripts/integration_suspect.py`, which scores chunks by how often their `paths:` appear as substrings in failing gate output. Ranked by (match count, latest failing gate index, alphabetical chunk_id) for full determinism — no more driver-variance in which chunk gets re-dispatched on integration failure.
-- **Terminal-MUST for iteration-file write in `loop/SKILL.md`.** Subagents now have an explicit terminal requirement: final action before returning is writing the iteration file, even on error paths (use `exit_reason: "stalled"` with partial context rather than returning with no record).
-- **Language-agnostic reference fixture.** `tests/fixtures/integration-retry/` uses `run-command` gates (the cross-adapter common denominator) to exercise the full failure → identify-suspect → fix → re-run cycle. Stays usable when TypeScript/Go adapters land in v0.15+.
-
-All changes fully backward-compatible with v0.10.
-
-## What's new in v0.10
-
-Iteration contract bundle — makes the iteration record shape authoritative across skill prose, schema, and adapter:
-
-- **Concrete `gate_report` template in `loop/SKILL.md`.** The skill now documents the exact object-form shape (`{passed, results: [...]}`) that the measure adapter emits and the iteration record expects. Kills the flat-list drift that caused stall_check to mis-hash in the v0.9 chrondel run.
-- **`failure_signature` is a hard rule.** 16-char lowercase hex, computed before writing the iteration file, never left as a placeholder. Schema enforces the pattern; empty or missing signatures silently broke stall detection before.
-- **`exit_reason` enum with explicit "not `status`" note.** Table in `loop/SKILL.md` enumerates the four values (`in_progress`, `success`, `budget_exhausted`, `stalled`) and when to write each. Schema marks `status` as a deprecated alias with a fallback documented in hooks.
-- **`measure_python.py` surfaces per-gate run-command failures.** Missing binaries (e.g., `bash` not on PATH) are now reported as a failed `GateResult` with a "command not found" hint, instead of propagating as an exception that halts the adapter.
-- **Lock-in tests.** `tests/test_v10_bundle.py` pins the stall_check object-form contract and `metrics_append` partial-outcome classification — if either breaks, the v0.10 contract has regressed.
-
-All changes fully backward-compatible with v0.9.
-
-## What's new in v0.9
-
-Recovery/resume fixes driven by the `chrondel` stress-test (8 scripted resume scenarios):
-
-- **`stall_check.py` handles flat-list `gate_report`.** The script now accepts both `[{gate_id, passed}, ...]` and `{passed, results: [...]}` shapes. Previously the flat-list shape (emitted by some legacy subagents) caused signature collisions across unrelated failures, disabling stall detection.
-- **`gate-guard.sh` uses `mtime` for latest iteration.** Previously used alphabetical sort, which picked `parser-010.json` over `parser-009.json` correctly but picked `parser-001.json` over a freshly-written `parser-002.json` when filesystem ordering varied. `mtime` is the single source of truth for "most recent iteration."
-- **`detect-resume.sh` status fallback + completed-chunks list.** The resume summary now reads `exit_reason` with a `status` fallback (for legacy records) and surfaces which chunks have already completed, so resumed sessions don't re-dispatch work that already succeeded.
-
-All changes fully backward-compatible with v0.8.
-
-## What's new in v0.8
-
-Correctness + subagent discipline bundle driven by the `minischeme` 18-chunk stress run:
-
-- **Iteration JSON validated before commit.** `git_iter_commit` now refuses to commit when the iteration record fails `schemas/iterations.schema.json`. Catches the silent-corruption cases where a subagent writes `status`/`gates` instead of `exit_reason`/`gate_report`, or zero-pads the integer `iteration` field. Commit-message-lies-about-status goes away.
-- **`chunk_topo` auto-serializes same-file chunks.** Two chunks in the same wave whose `paths:` overlap used to risk one's changes getting committed under the other's chunk message. `plan_waves` now splits overlapping pairs into consecutive sub-waves automatically.
-- **Per-chunk `gate_overrides:` in `chunks.yaml`.** Declare per-chunk gate argument narrowing upfront (e.g., `pytest_chunk.args = ["tests/test_<chunk>.py"]`) instead of having every parallel-wave subagent reinvent the defensive pattern. Loop skill applies them when building the criteria subset.
-- **Blueprint slicing, finally.** v0.2 punted on this. v0.8 delivers: subagents now receive only their chunk's section + the architecture overview + the new `## Cross-chunk types` section, not the whole blueprint. Kills the "Wave 4 implements Wave 5's code" ahead-of-scope pattern.
-- **`## Cross-chunk types` blueprint convention.** Authoritative section declaring types that multiple chunks consume and the canonical module each lives in. Prevents duplicate-singleton planting (parser-side `Nil` and values-side `Nil` turning out to be different objects).
-
-Fully backward-compatible with v0.7. Also: plan-refinement-mid-build is formally closed after 8 runs of zero evidence.
-
-## What's new in v0.7
-
-Correctness bundle driven by the `taskbridge` polyglot stress run:
-
-- **Gate `env:` honored by every gate type.** Previously `pytest`, `import-clean`, and `coverage` hardcoded `PYTHONPATH=<project>/src` and silently ignored gate-level `env:`; `ruff` and `mypy` didn't accept env at all. All 7 handlers now merge gate `env:` into the subprocess environment. Backward-compatible: handlers that injected `<project>/src` by default still do so when the gate doesn't specify its own PYTHONPATH.
-- **Parallel-wave correctness — per-chunk iteration filenames + `paths:`-scoped commits.** Iteration files are now `<chunk_id>-NNN.json` (previously `NNN.json`) so concurrent subagents write to disjoint filename namespaces. `chunks.yaml` gains an optional `paths: [...]` field declaring which project paths a chunk owns; `git_iter_commit.py` uses it to stage only those paths plus the chunk's iteration file. Projects without `paths:` fall back to the v0.6 `git add -A` behavior with a stderr warning. Kills the silent cross-contamination observed in parallel waves (one chunk's commit sweeping up another chunk's files).
-- **Related fixes.** `git_iter_commit.py --iteration` now resolves against `--project` when relative (previously failed silently on relative paths unless cwd was the project root). `git_iter_commit.py` now also returns exit 1 when a git operation fails (previously silently soft-failed, hiding missed commits).
-- **Clarify no longer proposes coverage as a per-chunk gate.** It now lands in `integration_gates` by default, matching the metric's whole-package scope. Avoids false-positive failures on chunks that land before the full package is implemented.
-
-Upgrade path: existing `criteria.yaml` and `chunks.yaml` files continue to work unchanged. Add `paths:` to each chunk to opt into scoped commits for parallel waves.
-
-All changes fully backward-compatible with v0.6.
-
-## What's new in v0.6
-
-Single fix driven by the indexgrep real-run evidence:
-
-- **`SKILLGOID_PYTHON` env export.** The adapter now always exports `SKILLGOID_PYTHON=sys.executable` into every gate subprocess. Shell command strings (e.g., `["bash", "-c", "..."]`) should reference `$SKILLGOID_PYTHON` instead of bare `python` — v0.4's auto-resolution only handles `command[0]`, not substrings inside shell command bodies.
-
-Before (indexgrep integration retry):
-```yaml
-command: ["bash", "-c", "python -m myproj"]   # exit 127 if 'python' not on PATH
+```
+/skillgoid:build "a Flask REST API with SQLite persistence and pytest coverage"
 ```
 
-After:
-```yaml
-command: ["bash", "-c", "$SKILLGOID_PYTHON -m myproj"]   # always works
+Skillgoid will:
+
+1. **Clarify** — ask a few focused questions to nail down scope, language, and success signals.
+2. **Synthesize (optional)** — if you have an analogue repo to learn from, it can derive gates from observation.
+3. **Feasibility** — pre-flight every gate against your environment before any iteration budget burns.
+4. **Plan** — produce `blueprint.md` (architecture) and `chunks.yaml` (ordered build units).
+5. **Build** — dispatch each chunk as a subagent, measure gates, reflect on failures, loop until gates pass or budget runs out.
+6. **Retrospect** — write a `retrospective.md`, curate notable lessons into `~/.claude/skillgoid/vault/`, and append a metrics line.
+
+**Resume after a session ends:**
+
+```
+/skillgoid:build resume
 ```
 
-Nothing else in v0.6. Plan-refinement-mid-build was formally dropped from the roadmap after producing zero evidence across four real runs (jyctl, taskq, mdstats, indexgrep). Shipping less is the right response to real data.
+The `SessionStart` hook automatically detects an in-progress build when you open a directory containing `.skillgoid/` and injects a resume summary.
 
-All changes fully backward-compatible with v0.5.
+**Smoke-test your install:**
 
-## What's new in v0.5
+```bash
+mkdir /tmp/sg-smoke && cd /tmp/sg-smoke
+# then in Claude Code:
+/skillgoid:build "a Python CLI that prints hello world with a --name flag"
+```
 
-Evidence-driven polish based on three real Skillgoid runs (jyctl, taskq, mdstats):
+---
 
-- **Parallel chunks.** `build` now groups chunks into waves via topological sort of `depends_on`, and dispatches every chunk in a wave concurrently. Sequential projects behave identically to v0.4; projects with independent chunks (like mdstats's parser + counters) run faster.
-- **Vault supersession tracking.** Lessons in `<language>-lessons.md` can now carry a `Status: resolved in vX.Y` line. The `retrieve` skill filters them against the current plugin version so users don't get stale advice for bugs newer Skillgoid already fixed.
-- **Feasibility scaffolding awareness.** `/skillgoid:feasibility` no longer hard-fails when `PYTHONPATH: src` references a path that doesn't exist yet (because the scaffold chunk will create it). Soft warning on fresh projects; hard failure only for absolute paths or paths outside the project.
+## How it works
 
-No plan-refinement-mid-build — 3 real runs produced zero evidence that's needed. Re-evaluate after a run actually demonstrates the need.
+### The pipeline
 
-All changes fully backward-compatible with v0.4.
+```
+retrieve → clarify → feasibility → plan → build loop → integration → retrospect
+```
 
-## What's new in v0.4
+| Stage | What happens |
+|---|---|
+| **retrieve** | Reads `~/.claude/skillgoid/vault/<language>-lessons.md`, filters lessons by plugin version, surfaces relevant prior-project learnings. |
+| **clarify** | Interactive Q&A — refines the goal, writes `.skillgoid/goal.md` and `.skillgoid/criteria.yaml`. |
+| **feasibility** | Shallow-checks every gate's tools and commands against the live environment. Fails fast on missing binaries before wasting iteration budget. |
+| **plan** | Writes `.skillgoid/blueprint.md` (architecture, type contracts, module responsibilities) and `.skillgoid/chunks.yaml` (build units with gate assignments and dependency order). Also dispatches the context7 fetcher to produce framework advisory grounding. |
+| **build loop** | Topological sort of `chunks.yaml` → execution waves. Chunks in the same wave run in parallel (separate subagents). Each subagent builds, measures gates, reflects, writes an iteration record, loops until success/stall/budget. |
+| **integration** | After all chunks pass, runs `integration_gates` (whole-system smoke tests). Up to 2 auto-repair retries. |
+| **retrospect** | Synthesizes a retrospective, curates `notable: true` iterations into the vault, appends metrics. |
 
-Observed-ROI reprioritization driven by the first real Skillgoid run (jyctl, 2026-04-17):
+### Build loop detail
 
-- **Gate `env:` field.** Gates can now carry an `env:` dict. Lets `cli-command-runs` pass `PYTHONPATH=src` without pre-installing the project.
-- **Python binary auto-resolution.** Bare `python` in command lists is replaced with `sys.executable`, fixing environments where only `python3` is on PATH.
-- **Pre-plan feasibility skill.** `/skillgoid:feasibility` — invoked automatically between `clarify` and `plan` — shallow-checks every gate's tools and commands against the environment before any iteration budget burns.
-- **Unstick skill.** `/skillgoid:unstick <chunk> "<hint>"` — re-dispatch a stalled chunk with a one-sentence human hint injected into the chunk prompt. Autonomy-preservation lever: recovery cost drops from "full manual takeover" to "one sentence."
-- **`/skillgoid:stats` reader.** Cross-project metrics summary — success/stall/budget rates, avg iterations per chunk, language breakdown. Reads `~/.claude/skillgoid/metrics.jsonl` (populated by v0.3's `retrospect`).
-- **Clarify improvements.** Proposes a default `.gitignore` for Python projects; adds a subprocess-coverage caveat comment when coverage + CLI gates are both in play.
+Each chunk runs a tight inner loop inside its own subagent:
 
-All changes fully backward-compatible with v0.3.
+```
+build code → measure gates → reflect on failures → loop
+```
 
-## What's new in v0.3
+Exit conditions, evaluated in order:
+- **success** — all declared gates pass.
+- **budget_exhausted** — `max_attempts` reached without success.
+- **stalled** — `failure_signature` (16-char hex hash) matches the previous iteration's — the subagent is repeating the same failure. Deterministic; never judgment-based.
 
-Six additive polish items, zero architectural change:
+Every iteration writes `.skillgoid/iterations/<chunk_id>-NNN.json` (git-committed by default for free rollback targets). The `Stop` hook blocks accidental exits when gates are still failing.
 
-- **Adapter timeouts.** Every gate accepts an optional `timeout: <seconds>` (default 300). Runaway tests or hung CLIs fail fast with a clear hint.
-- **Coverage gate.** New gate type `coverage` — honors `min_percent` and optional `compare_to_baseline` regression detection. Catches the "tests pass because the feature doesn't exist yet" trap.
-- **Diff-based reflection.** Each iteration record now includes a `changes` field (files touched, net lines, summary) derived from the per-iteration git diff. Sharpens stall analysis and retrospect.
-- **Better `gate-guard` messages.** When the Stop hook blocks mid-loop, it now surfaces the top-2 failing gate hints so you can decide whether to continue without reading iteration JSON.
-- **Model tiering.** Optional `models:` block in `criteria.yaml` lets you override chunk/integration subagent models per-project (`haiku`/`sonnet`/`opus`).
-- **Cross-project metrics scaffolding.** Retrospect now appends one JSON line per project to `~/.claude/skillgoid/metrics.jsonl`. Data accumulates locally; readers/dashboards come later.
+### Parallel waves
 
-All changes are fully backward-compatible with v0.2.
+Chunks with independent `depends_on` relationships run concurrently in the same wave. The orchestrator issues all of a wave's `Agent()` calls in a single message, waits for all to return, then evaluates gates across the whole wave before advancing.
 
-## What's new in v0.2
-
-Three structural upgrades that make the build loop credible on real projects:
-
-- **Subagent-per-chunk isolation.** Each chunk runs in a fresh subagent with a curated context slice — the main session stays small, cross-chunk interference goes away, and long projects no longer burn tokens on accumulated context.
-- **Deterministic stall detection + git-per-iteration.** Stalls are now detected by hash comparison, not judgment. Every iteration produces a git commit (`skillgoid: iter N of chunk <id> …`) for free rollback targets. Opt out with `loop.skip_git: true` in `criteria.yaml`.
-- **Integration gate.** Opt-in `integration_gates:` block in `criteria.yaml` runs after all per-chunk gates pass — catches "green gates, broken product" failures. Up to 2 auto-repair retries before surfacing.
-
-All changes are backward-compatible. Existing v0 projects resume unchanged.
-
-## Concepts
-
-- **`.skillgoid/`** — project-local state: `goal.md`, `criteria.yaml`, `blueprint.md`, `chunks.yaml`, `iterations/<chunk_id>-NNN.json`, `integration/<attempt>.json`, `retrospective.md`.
-- **`~/.claude/skillgoid/vault/`** — user-global curated lessons: one `<language>-lessons.md` per language, plus optional `meta-lessons.md`.
-- **Gates** — structured measurements (`pytest`, `ruff`, `mypy`, `import-clean`, `cli-command-runs`, `run-command`). Loop termination is defined in terms of these.
-- **Acceptance scenarios** — free-form success stories. Inform test-writing but do not block the loop.
-- **Hooks** — `SessionStart` injects resume context; `Stop` warns when you try to stop mid-loop with failing gates.
+---
 
 ## Commands
 
-- `/skillgoid:build "<goal>"` — start a new project.
-- `/skillgoid:build resume` — continue the current project.
-- `/skillgoid:build status` — print chunk + iteration summary.
-- `/skillgoid:build retrospect-only` — finalize even if gates didn't all pass.
-- `/skillgoid:clarify`, `/skillgoid:plan`, `/skillgoid:loop`, `/skillgoid:retrieve`, `/skillgoid:retrospect` — sub-skills, directly invokable.
+### Core
+
+| Command | Purpose |
+|---|---|
+| `/skillgoid:build "<goal>"` | Start a new project. Runs the full pipeline from clarify through retrospect. |
+| `/skillgoid:build resume` | Continue an in-progress build. Skips chunks that already succeeded. |
+| `/skillgoid:build status` | Print chunk + iteration summary for the current project. |
+| `/skillgoid:build retrospect-only` | Finalize the project as-is, even if not all gates passed. |
+
+### Sub-skills (directly invokable)
+
+| Command | Purpose |
+|---|---|
+| `/skillgoid:clarify` | Refine goal and draft `criteria.yaml` interactively. |
+| `/skillgoid:feasibility` | Pre-flight gates against the environment. |
+| `/skillgoid:plan` | Write `blueprint.md` + `chunks.yaml`. Accepts `--refresh-context7` to regenerate framework grounding. |
+| `/skillgoid:synthesize-gates <repo-url-or-path>` | Derive `criteria.yaml` gates from an analogue reference repo. |
+| `/skillgoid:unstick <chunk_id> "<hint>"` | Re-dispatch a stalled chunk with a one-sentence human hint injected into its prompt. |
+| `/skillgoid:stats` | Cross-project metrics summary (success/stall rates, avg iterations). Reads `~/.claude/skillgoid/metrics.jsonl`. |
+| `/skillgoid:explain` | Describe Skillgoid's concepts and pipeline interactively. |
+| `/skillgoid:retrieve` | Manually surface vault lessons for a given goal. |
+| `/skillgoid:retrospect` | Run the retrospect stage standalone (e.g. after manual edits). |
+
+---
+
+## Configuring gates
+
+Gates live in `.skillgoid/criteria.yaml` and define what "done" means for each chunk and for the project as a whole.
+
+### Minimal example
+
+```yaml
+language: python
+
+loop:
+  max_attempts: 5
+
+gates:
+  - id: lint
+    type: ruff
+    args: [check, .]
+
+  - id: tests
+    type: pytest
+    args: [tests/]
+
+  - id: typecheck
+    type: mypy
+    args: [src/]
+
+  - id: cli_help
+    type: cli-command-runs
+    args: [myapp, --help]
+    expect_stdout_match: "Usage:"
+
+integration_gates:
+  - id: cli_smoke
+    type: cli-command-runs
+    args: [myapp, version]
+    expect_exit: 0
+
+acceptance:
+  - "Running `myapp sync` creates or updates tasks.json in the CWD."
+  - "Running `myapp sync --dry-run` prints a diff without writing anything."
+```
+
+### Gate types
+
+| Type | What it measures | Key fields |
+|---|---|---|
+| `pytest` | Test suite pass/fail | `args` (passed to pytest), `timeout` |
+| `ruff` | Lint / style | `args` (e.g. `[check, .]`) |
+| `mypy` | Static type checking | `args` (e.g. `[src/]`) |
+| `import-clean` | Package imports without error | `module` or `args[0]` |
+| `cli-command-runs` | CLI exits cleanly | `args` (argv list), `expect_exit`, `expect_stdout_match` |
+| `run-command` | Arbitrary shell command exits cleanly | `command` (argv list), `expect_exit` |
+| `coverage` | Test coverage threshold | `target`, `min_percent` (default 80), `compare_to_baseline` |
+
+### Common fields
+
+```yaml
+gates:
+  - id: tests              # unique identifier referenced by chunks
+    type: pytest
+    args: [tests/]
+    timeout: 120           # seconds before the gate is killed and fails (default: 300)
+    env:                   # extra env vars injected into the subprocess
+      PYTHONPATH: src
+```
+
+> **Note on shell commands:** inside `run-command` or `cli-command-runs` command strings that use `bash -c`, reference `$SKILLGOID_PYTHON` instead of bare `python` — the adapter exports `SKILLGOID_PYTHON=sys.executable` into every gate subprocess.
+>
+> ```yaml
+> command: ["bash", "-c", "$SKILLGOID_PYTHON -m myservice --port 8999 & sleep 1 && curl -sf localhost:8999/health && kill %1"]
+> ```
+
+### Model overrides
+
+```yaml
+models:
+  chunk_subagent: sonnet    # default: sonnet
+  integration_subagent: haiku
+```
+
+---
+
+## State locations
+
+### Project-local (`.skillgoid/`)
+
+| File | Purpose |
+|---|---|
+| `goal.md` | Refined goal, scope, non-goals, success signals. Written by `clarify`. |
+| `criteria.yaml` | Gates, acceptance scenarios, loop config. Written by `clarify` or `synthesize-gates`. |
+| `blueprint.md` | Architecture, module responsibilities, cross-chunk type contracts. Written by `plan`. |
+| `chunks.yaml` | Ordered build units with gate assignments, `depends_on`, `paths`. Written by `plan`. |
+| `iterations/<chunk_id>-NNN.json` | Per-iteration records: exit reason, gate report, failure signature, changes. |
+| `integration/<attempt>.json` | Integration gate results per attempt. |
+| `retrospective.md` | End-of-project analysis, lessons, vault nominations. |
+| `context7/framework-grounding.md` | Advisory framework idioms fetched from context7. Used by `plan` + `build`. |
+| `context7/SKIPPED` | Sentinel written when context7 fetch failed or was skipped. |
+
+### User-global (`~/.claude/skillgoid/`)
+
+| Path | Purpose |
+|---|---|
+| `vault/<language>-lessons.md` | Curated per-language lessons from completed projects. Grows over time. |
+| `vault/meta-lessons.md` | Cross-language architectural lessons. |
+| `metrics.jsonl` | One JSON line per completed project — outcome, chunks, iterations, stalls, elapsed time. |
+
+---
+
+## Context7 grounding
+
+When [context7](https://context7.com) is installed and configured in your Claude Code session, Skillgoid's `plan` skill fetches framework-specific advisory grounding before drafting the blueprint.
+
+**What it does:** infers the primary framework from `goal.md` + manifest files (`pyproject.toml`, `package.json`, `go.mod`, `Cargo.toml`), queries context7 for idiomatic project structure, testing patterns, and common pitfalls, and writes `.skillgoid/context7/framework-grounding.md`. The `build` skill attaches this file to every per-chunk subagent prompt as advisory guidance.
+
+**Installing context7:**
+
+```bash
+# requires a free API key from https://context7.com/dashboard
+claude mcp add --transport http --scope user context7 \
+  https://mcp.context7.com/mcp \
+  --header "CONTEXT7_API_KEY: <your-key>"
+# then fully restart Claude Code so the session picks up the new MCP
+```
+
+**Graceful degradation:** if context7 is not installed, quota is exceeded, or the framework can't be inferred, Skillgoid writes `.skillgoid/context7/SKIPPED` with a one-line reason and continues without grounding — the pipeline is unaffected.
+
+**Refresh grounding:**
+
+```bash
+/skillgoid:plan --refresh-context7
+```
+
+Deletes the existing grounding file (and `SKIPPED` sentinel) and re-fetches. Hand-edits to `framework-grounding.md` persist across re-runs unless you pass this flag.
+
+---
+
+## Synthesizing gates from analogue repos
+
+`synthesize-gates` derives a draft `criteria.yaml` by observing one or more reference repos, rather than authoring gates from scratch.
+
+```
+/skillgoid:synthesize-gates https://github.com/pallets/flask
+/skillgoid:synthesize-gates ./my-reference-project ./another-reference
+```
+
+**What it does:**
+
+1. Grounds observations against the analogue(s) and your `goal.md`.
+2. Dispatches a synthesis subagent to propose gates with full provenance comments.
+3. Validates proposed gates against `schemas/criteria.schema.json`.
+4. Runs oracle validation — checks that each gate actually discriminates the analogue from an empty scaffold. Proposed gates get a `# validated: oracle | smoke-only | none` label.
+5. Writes `.skillgoid/criteria.yaml.proposed` — never overwrites an existing `criteria.yaml`.
+
+**Flags:**
+
+| Flag | Effect |
+|---|---|
+| `--skip-validation` | Skip oracle validation (Stage 3). Useful when analogue deps aren't installed. |
+| `--validate-only` | Re-run oracle validation on an existing `drafts.json` — no new synthesis. |
+
+Review and rename `.skillgoid/criteria.yaml.proposed` → `criteria.yaml` when satisfied.
+
+---
 
 ## Custom language adapters
 
-Skillgoid v0 ships with `python-gates`. See [docs/custom-adapter-template.md](docs/custom-adapter-template.md) to write your own for Node, Go, Rust, etc.
+Skillgoid ships with `python-gates`. To add Node.js, Go, Rust, or any other language:
 
-## Design
+1. Create `skills/<language>-gates/SKILL.md` implementing the gate adapter contract.
+2. Optionally add `scripts/measure_<language>.py` (or equivalent) for non-trivial measurement logic.
 
-Full spec: [docs/superpowers/specs/2026-04-17-skillgoid-design.md](docs/superpowers/specs/2026-04-17-skillgoid-design.md).
+**Adapter contract** — the skill receives project path + a filtered `criteria.yaml` subset and must emit to stdout:
+
+```json
+{
+  "passed": true,
+  "results": [
+    {"gate_id": "lint", "passed": true, "stdout": "...", "stderr": "", "hint": ""}
+  ]
+}
+```
+
+Exit code: `0` all passed, `1` any failed, `2` internal error. Always emit valid JSON, even on partial failure.
+
+See [docs/custom-adapter-template.md](docs/custom-adapter-template.md) for a full skeleton and the gate-type enumeration contract.
+
+---
+
+## Recovery
+
+### Stalled chunk
+
+When a chunk exits `stalled` (same failure repeated twice), the orchestrator surfaces a menu:
+
+```
+• /skillgoid:build resume              retry with same budget
+• /skillgoid:unstick <id> "<hint>"     re-dispatch with a human hint
+• /skillgoid:build retrospect-only     finalize as-is
+```
+
+`unstick` is capped at 3 invocations per chunk — after that, treat it as budget-exhausted and finalize or adjust `criteria.yaml`.
+
+### Iteration file not written
+
+If a chunk subagent returns without writing its iteration file, the orchestrator halts the wave before the gate check and reports the missing chunks. Fix options: re-dispatch via `resume`, or write the file by hand (JSON schema at `schemas/iterations.schema.json`).
+
+### Stop hook blocks exit
+
+The `Stop` hook fires when you try to end a Claude Code session mid-loop with failing gates and remaining budget. This is intentional — it surfaces the top-2 failing gate hints so you can decide whether to continue. To override, run `/skillgoid:build retrospect-only` first.
+
+---
+
+## Development
+
+```bash
+git clone https://github.com/metachungoid/skillgoid-plugin.git
+cd skillgoid-plugin
+
+# install dev deps
+pip install -e ".[dev]"
+
+# run tests
+make test           # or: pytest
+
+# run a single test
+pytest tests/test_measure_python.py::test_name -v
+
+# lint
+make lint           # or: ruff check .
+
+# install locally for manual testing
+make install-local  # or: claude plugin install .
+```
+
+Python ≥ 3.11 required. Dev deps: `pytest`, `pyyaml`, `jsonschema`, `ruff`, `mypy`.
+
+**Architecture notes:**
+
+- **Skills are prose; scripts are code.** `skills/*/SKILL.md` are the procedural contracts. Non-trivial logic lives in `scripts/*.py` — the skill shells out. When adding behaviour, grow a script and reference it from the skill.
+- **Tests assert prose contracts.** Behaviour that runs inside Agent-tool dispatches (build loop, retry logic, context7 fetcher) is not reachable from pytest. Tests in `tests/test_*_skill.py` assert that the SKILL.md files contain the required prose, which acts as the specification contract.
+- **Backward compatibility.** Every release since v0.2 has been additive. Preserve that invariant when changing schemas, iteration file shapes, or skill inputs.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full version history.
+
+---
 
 ## License
 
-MIT.
+MIT — see [LICENSE](LICENSE).
