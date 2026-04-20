@@ -16,10 +16,35 @@ Produces two files:
 - `.skillgoid/goal.md`
 - `.skillgoid/criteria.yaml`
 
+## Flags
+
+- `--refresh-context7` — delete `.skillgoid/context7/framework-grounding.md` and `.skillgoid/context7/SKIPPED` (if present) before step 2.5, forcing the fetcher to re-run and regenerate the grounding. Use this when the framework changed, the goal changed in a way that needs fresh docs, or hand-edits to the grounding file should be discarded. This flag lives on `plan` (not `build`) because `build resume` does not re-invoke `plan`.
+
 ## Procedure
 
 1. **Verify** both input files exist. If not, stop and tell the caller to run `skillgoid:clarify` first.
 2. **Read** the goal, criteria, and any past-lesson summary still in context from `skillgoid:retrieve`.
+
+2.5. **context7 grounding (advisory).** Before drafting the blueprint, make one lightweight attempt to produce a framework-specific advisory grounding file. This is best-effort and never blocks progress.
+
+   Procedure:
+   1. If `--refresh-context7` was passed to this skill, delete `.skillgoid/context7/framework-grounding.md` and `.skillgoid/context7/SKIPPED` if either exists. Then continue.
+   2. If `.skillgoid/context7/framework-grounding.md` already exists (non-empty), skip the rest of step 2.5 — reuse the existing file.
+   3. If `.skillgoid/context7/SKIPPED` exists, skip the rest of step 2.5 — honour the prior skip.
+   4. Otherwise, ensure `.skillgoid/context7/` exists and dispatch the context7 fetcher subagent via the Agent tool. Use the prompt body at `skills/plan/prompts/context7-fetcher.md` (read the file and pass its contents as the `prompt` field).
+      ```
+      Agent(
+        subagent_type="general-purpose",
+        description="Fetch context7 framework grounding",
+        prompt=<contents of skills/plan/prompts/context7-fetcher.md>,
+      )
+      ```
+   5. Capture the fetcher subagent's final text output.
+      - If it starts with `SKIPPED:`, write the remainder of the line (after `SKIPPED: `) to `.skillgoid/context7/SKIPPED` and continue to step 3 — do not create `framework-grounding.md`.
+      - Otherwise, write the full output to `.skillgoid/context7/framework-grounding.md`.
+   6. Treat any fetcher-side error (subagent failure, tool errors) as a graceful skip: write `.skillgoid/context7/SKIPPED` with a one-line reason (e.g. `fetcher dispatch failed`) and continue.
+
+   Fetcher failures are warnings, not errors. Never abort `plan` because of step 2.5.
 3. **Write `blueprint.md`** covering:
    - Architecture overview (1–3 paragraphs)
    - **Cross-chunk types section** (v0.8, REQUIRED for multi-chunk type contracts). Immediately after the architecture overview, add a `## Cross-chunk types` section enumerating types that multiple chunks consume, with the canonical module each lives in. Example:
@@ -41,6 +66,7 @@ Produces two files:
    - Public interfaces / function signatures for the main entry points
    - Data model (types, storage, or schema) if applicable
    - External dependencies
+   - **Context7 grounding (if present).** If `.skillgoid/context7/framework-grounding.md` exists and is non-empty, read it before drafting the blueprint and prefer the idioms it surfaces (project structure, testing patterns, common pitfalls). It is **advisory framework guidance**, not a requirements document — deviate when the goal or criteria demand it. If the file is missing or `.skillgoid/context7/SKIPPED` exists, proceed without it.
 4. **Write `chunks.yaml`** decomposing implementation into 3–8 chunks. Each chunk:
    - Has a short `id` (kebab-case)
    - Has a concrete `description` (what code will land in this chunk)
